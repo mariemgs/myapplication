@@ -13,10 +13,20 @@ jobs:
 
   test-docker-compose:
     runs-on: ubuntu-latest
+    env:
+      DOCKER_IMAGE_BACKEND: ci-backend
+      DOCKER_IMAGE_FRONTEND: ci-frontend
+      TAG: latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
       - run: docker compose build
+      - name: Scan backend image (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: backend:latest
+          severity: CRITICAL,HIGH
+          exit-code: 1
       - run: docker compose down -v --remove-orphans
       - run: docker compose up -d --wait backend frontend adminer
       - name: Test backend is up
