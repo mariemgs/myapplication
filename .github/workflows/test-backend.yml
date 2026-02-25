@@ -30,6 +30,20 @@ jobs:
         run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         working-directory: backend
       - run: docker compose down -v --remove-orphans
+      
+      #adding security tests
+      - name: Run SAST (Bandit)
+        run: |
+          pip install bandit
+          bandit -r backend -ll
+
+      - name: Dependency vulnerability scan (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt
+
+      - name: Secrets scan (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
       - name: Store coverage files
         uses: actions/upload-artifact@v6
         with:
