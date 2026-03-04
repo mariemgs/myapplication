@@ -41,7 +41,7 @@ jobs:
       - name: Run tests with coverage
         working-directory: backend
         run: |
-          uv run pytest app/tests/ \
+          uv run pytest tests/ \
             --cov=app \
             --cov-report=xml:../coverage.xml \
             --cov-report=term-missing
