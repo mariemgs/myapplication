@@ -1,5 +1,4 @@
 name: Playwright Tests
-
 on:
   push:
     branches:
@@ -14,16 +13,13 @@ on:
         description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
         required: false
         default: 'false'
-
 jobs:
   changes:
     runs-on: ubuntu-latest
-    # Set job outputs to values from filter step
     outputs:
       changed: ${{ steps.filter.outputs.changed }}
     steps:
     - uses: actions/checkout@v4
-    # For pull requests it's not necessary to checkout the code but for the main branch it is
     - uses: dorny/paths-filter@v3
       id: filter
       with:
@@ -34,7 +30,6 @@ jobs:
             - .env
             - compose*.yml
             - .github/workflows/playwright.yml
-
   test-playwright:
     needs:
       - changes
@@ -64,13 +59,18 @@ jobs:
     - run: bun ci
       working-directory: frontend
     - run: bash scripts/generate-client.sh
+    - name: Stop staging if running
+      run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
     - name: Create Traefik network
-      run: docker network create traefik-public || true 
+      run: docker network create traefik-public || true
     - run: docker compose build
     - run: docker compose down -v --remove-orphans
     - name: Run Playwright tests
       run: docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
     - run: docker compose down -v --remove-orphans
+    - name: Restart staging
+      if: always()
+      run: VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
     - name: Upload blob report to GitHub Actions Artifacts
       if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v4
@@ -79,12 +79,10 @@ jobs:
         path: frontend/blob-report
         include-hidden-files: true
         retention-days: 1
-
   merge-playwright-reports:
     needs:
       - test-playwright
       - changes
-    # Merge reports after playwright-tests, even if some shards have failed
     if: ${{ !cancelled() && needs.changes.outputs.changed == 'true' }}
     runs-on: self-hosted
     steps:
@@ -108,9 +106,7 @@ jobs:
         path: frontend/playwright-report
         retention-days: 30
         include-hidden-files: true
-
-  # https://github.com/marketplace/actions/alls-green#why
-  alls-green-playwright:  # This job does nothing and is only used for the branch protection
+  alls-green-playwright:
     if: always()
     needs:
       - test-playwright
