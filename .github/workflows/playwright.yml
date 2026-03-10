@@ -42,6 +42,11 @@ jobs:
         shardTotal: [4]
       fail-fast: false
     steps:
+    - name: Fix permissions
+      run: |
+        sudo chown -R $USER:$USER /home/meriemguesmi/actions-runner/_work/myapplication/ || true
+        sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
+        sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
     - uses: actions/setup-python@v4
