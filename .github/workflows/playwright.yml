@@ -3,7 +3,7 @@ name: Playwright Tests
 on:
   push:
     branches:
-    - master
+    - main
   pull_request:
     types:
     - opened
@@ -22,7 +22,7 @@ jobs:
     outputs:
       changed: ${{ steps.filter.outputs.changed }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v4
     # For pull requests it's not necessary to checkout the code but for the main branch it is
     - uses: dorny/paths-filter@v3
       id: filter
@@ -40,16 +40,16 @@ jobs:
       - changes
     if: ${{ needs.changes.outputs.changed == 'true' }}
     timeout-minutes: 60
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         shardIndex: [1, 2, 3, 4]
         shardTotal: [4]
       fail-fast: false
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
-    - uses: actions/setup-python@v6
+    - uses: actions/setup-python@v4
       with:
         python-version: '3.10'
     - name: Setup tmate session
@@ -58,12 +58,14 @@ jobs:
       with:
         limit-access-to-actor: true
     - name: Install uv
-      uses: astral-sh/setup-uv@v7
+      uses: astral-sh/setup-uv@v4
     - run: uv sync
       working-directory: backend
     - run: bun ci
       working-directory: frontend
     - run: bash scripts/generate-client.sh
+    - name: Create Traefik network
+      run: docker network create traefik-public || true 
     - run: docker compose build
     - run: docker compose down -v --remove-orphans
     - name: Run Playwright tests
@@ -71,7 +73,7 @@ jobs:
     - run: docker compose down -v --remove-orphans
     - name: Upload blob report to GitHub Actions Artifacts
       if: ${{ !cancelled() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v4
       with:
         name: blob-report-${{ matrix.shardIndex }}
         path: frontend/blob-report
@@ -84,14 +86,14 @@ jobs:
       - changes
     # Merge reports after playwright-tests, even if some shards have failed
     if: ${{ !cancelled() && needs.changes.outputs.changed == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
     - name: Install dependencies
       run: bun ci
     - name: Download blob reports from GitHub Actions Artifacts
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v4
       with:
         path: frontend/all-blob-reports
         pattern: blob-report-*
@@ -100,7 +102,7 @@ jobs:
       run: bunx playwright merge-reports --reporter html ./all-blob-reports
       working-directory: frontend
     - name: Upload HTML report
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v4
       with:
         name: html-report--attempt-${{ github.run_attempt }}
         path: frontend/playwright-report
@@ -112,7 +114,7 @@ jobs:
     if: always()
     needs:
       - test-playwright
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Decide whether the needed jobs succeeded or failed
         uses: re-actors/alls-green@release/v1
