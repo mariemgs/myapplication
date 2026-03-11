@@ -30,6 +30,5 @@ jobs:
         uses: actions/checkout@v4
       - name: Create Traefik network
         run: docker network create traefik-public || true
-      - run: docker compose -f compose.yml --project-name ${{ secrets.STACK_NAME_STAGING }} build
-      - run: docker compose -f compose.yml --project-name ${{ secrets.STACK_NAME_STAGING }} up -d
-      
+      - run: docker compose -f compose.yml -f compose.override.yml --project-name ${{ secrets.STACK_NAME_STAGING }} build
+      - run: docker compose -f compose.yml -f compose.override.yml --project-name ${{ secrets.STACK_NAME_STAGING }} up -d
