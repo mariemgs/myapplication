@@ -44,8 +44,9 @@ jobs:
     steps:
     - name: Fix permissions
       run: |
-        sudo chown -R $USER:$USER /home/meriemguesmi/actions-runner/_work/myapplication/ || true
-        sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
+        sudo rm -rf ${{ github.workspace }}/frontend/blob-report || true
+        sudo rm -rf ${{ github.workspace }}/frontend/test-results || true
+        sudo chown -R $USER:$USER ${{ github.workspace }} || true
         sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
