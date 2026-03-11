@@ -44,7 +44,7 @@ jobs:
     steps:
     - name: Fix permissions
       run: |
-        sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
+        sudo rm -f /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report/report-${{ matrix.shardIndex }}.zip || true
         sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
         sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
 
