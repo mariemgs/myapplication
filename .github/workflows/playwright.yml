@@ -44,10 +44,10 @@ jobs:
     steps:
     - name: Fix permissions
       run: |
-        sudo rm -rf ${{ github.workspace }}/frontend/blob-report || true
-        sudo rm -rf ${{ github.workspace }}/frontend/test-results || true
-        sudo chown -R $USER:$USER ${{ github.workspace }} || true
+        sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
         sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
+        sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
+
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
     - uses: actions/setup-python@v4
@@ -76,7 +76,9 @@ jobs:
     - run: docker compose down -v --remove-orphans
     - name: Restart staging
       if: always()
-      run: VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
+      run: |
+        cd /home/meriemguesmi/projects/full-stack-fastapi-template
+        VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
     - name: Upload blob report to GitHub Actions Artifacts
       if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v4
@@ -92,6 +94,11 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.changed == 'true' }}
     runs-on: self-hosted
     steps:
+    - name: Fix permissions
+      run: |
+        sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
+        sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
+        sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
     - name: Install dependencies
@@ -122,7 +129,6 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
       - name: Decide whether the needed jobs succeeded or failed
         uses: re-actors/alls-green@release/v1
         with:
