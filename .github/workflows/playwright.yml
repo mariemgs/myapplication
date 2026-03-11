@@ -44,9 +44,11 @@ jobs:
     steps:
     - name: Fix permissions
       run: |
-        sudo rm -f /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report/report-${{ matrix.shardIndex }}.zip || true
+        sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
         sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
         sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
+        mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
+        mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
 
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
@@ -72,8 +74,16 @@ jobs:
     - run: docker compose build
     - run: docker compose down -v --remove-orphans
     - name: Run Playwright tests
-      run: docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+      run: |
+        export UID=$(id -u)
+        export GID=$(id -g)
+        docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
     - run: docker compose down -v --remove-orphans
+    - name: Fix report permissions after tests
+      if: always()
+      run: |
+        sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
+        sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
     - name: Restart staging
       if: always()
       run: |
@@ -99,6 +109,8 @@ jobs:
         sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
         sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
         sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
+        mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
+        mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
     - name: Install dependencies
