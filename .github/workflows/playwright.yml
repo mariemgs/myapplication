@@ -19,7 +19,7 @@ jobs:
     outputs:
       changed: ${{ steps.filter.outputs.changed }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - uses: dorny/paths-filter@v3
       id: filter
       with:
@@ -48,7 +48,7 @@ jobs:
         sudo rm -rf ${{ github.workspace }}/frontend/test-results || true
         sudo chown -R $USER:$USER ${{ github.workspace }} || true
         sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - uses: oven-sh/setup-bun@v2
     - uses: actions/setup-python@v4
       with:
@@ -92,7 +92,7 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.changed == 'true' }}
     runs-on: self-hosted
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - uses: oven-sh/setup-bun@v2
     - name: Install dependencies
       run: bun ci
