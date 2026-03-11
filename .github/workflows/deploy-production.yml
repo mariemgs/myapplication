@@ -1,17 +1,15 @@
 name: Deploy to Production
-
 on:
   release:
     types:
       - published
-
 jobs:
   deploy:
     # Do not deploy in the main repository, only in user projects
     if: github.repository_owner != 'fastapi'
     runs-on:
       - self-hosted
-      - production
+      - Linux
     env:
       ENVIRONMENT: production
       DOMAIN: ${{ secrets.DOMAIN_PRODUCTION }}
@@ -26,7 +24,17 @@ jobs:
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
     steps:
+      - name: Fix permissions
+        run: |
+          sudo rm -rf ${{ github.workspace }}/frontend/blob-report || true
+          sudo rm -rf ${{ github.workspace }}/frontend/test-results || true
+          sudo chown -R $USER:$USER ${{ github.workspace }} || true
+
       - name: Checkout
-        uses: actions/checkout@v6
-      - run: docker compose -f compose.yml --project-name ${{ secrets.STACK_NAME_PRODUCTION }} build
-      - run: docker compose -f compose.yml --project-name ${{ secrets.STACK_NAME_PRODUCTION }} up -d
+        uses: actions/checkout@v4
+
+      - name: Create Traefik network
+        run: docker network create traefik-public || true
+
+      - run: docker compose -f compose.yml -f compose.override.yml --project-name ${{ secrets.STACK_NAME_PRODUCTION }} build
+      - run: docker compose -f compose.yml -f compose.override.yml --project-name ${{ secrets.STACK_NAME_PRODUCTION }} up -d

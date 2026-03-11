@@ -26,6 +26,11 @@ jobs:
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
     steps:
+      - name: Fix permissions
+          run: |
+            sudo rm -rf ${{ github.workspace }}/frontend/blob-report || true
+            sudo rm -rf ${{ github.workspace }}/frontend/test-results || true
+            sudo chown -R $USER:$USER ${{ github.workspace }} || true
       - name: Checkout
         uses: actions/checkout@v4
       - name: Create Traefik network
