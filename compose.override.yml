@@ -105,7 +105,6 @@ services:
         - NODE_ENV=development
 
   playwright:
-    user: "${UID}:${GID}"
     build:
       context: .
       dockerfile: frontend/Dockerfile.playwright

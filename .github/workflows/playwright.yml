@@ -108,6 +108,8 @@ jobs:
         sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
         mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
         mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
+        chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
+        chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
     - name: Install dependencies
