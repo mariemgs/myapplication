@@ -49,7 +49,8 @@ jobs:
         sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
         mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
         mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
-
+        chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
+        chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
     - uses: actions/setup-python@v4
@@ -74,18 +75,14 @@ jobs:
     - run: docker compose build
     - run: docker compose down -v --remove-orphans
     - name: Run Playwright tests
-      run: |
-        docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+      run: docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+    - run: docker compose down -v --remove-orphans
     - name: Fix report permissions after tests
       if: always()
       run: |
         sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/ || true
-    - name: Restart staging
-      if: always()
-      run: |
-        cd /home/meriemguesmi/projects/full-stack-fastapi-template
-        docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
-        VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
+        chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
+        chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
     - name: Upload blob report to GitHub Actions Artifacts
       if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v4
@@ -94,6 +91,18 @@ jobs:
         path: frontend/blob-report
         include-hidden-files: true
         retention-days: 1
+  restart-staging:
+    needs:
+      - test-playwright
+    if: always()
+    runs-on: self-hosted
+    steps:
+      - name: Restart staging
+        run: |
+          cd /home/meriemguesmi/projects/full-stack-fastapi-template
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
+          sleep 5
+          VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
   merge-playwright-reports:
     needs:
       - test-playwright
