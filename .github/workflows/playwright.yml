@@ -79,12 +79,12 @@ jobs:
     - name: Fix report permissions after tests
       if: always()
       run: |
-        sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
-        sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
+        sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/ || true
     - name: Restart staging
       if: always()
       run: |
         cd /home/meriemguesmi/projects/full-stack-fastapi-template
+        docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
         VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
     - name: Upload blob report to GitHub Actions Artifacts
       if: ${{ !cancelled() }}
