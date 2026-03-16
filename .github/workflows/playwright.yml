@@ -75,9 +75,9 @@ jobs:
     - run: docker compose down -v --remove-orphans
     - name: Run Playwright tests
       run: |
-        export UID=$(id -u)
-        export GID=$(id -g)
-        docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        export DOCKER_UID=$(id -u)
+        export DOCKER_GID=$(id -g)
+        UID=$DOCKER_UID GID=$DOCKER_GID docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
     - run: docker compose down -v --remove-orphans
     - name: Fix report permissions after tests
       if: always()
