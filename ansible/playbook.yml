@@ -1,0 +1,36 @@
+---
+- name: Deploy Application to Staging
+  hosts: staging
+  become: false
+
+  vars:
+    project_dir: /home/meriemguesmi/projects/full-stack-fastapi-template
+    vite_api_url: http://192.168.29.131:8000
+    stack_name: myapp-staging
+
+  tasks:
+    - name: Create Traefik network if not exists
+      shell: docker network inspect traefik-public || docker network create traefik-public
+
+    - name: Stop existing containers
+      command: >
+        docker compose -f {{ project_dir }}/compose.yml
+        -f {{ project_dir }}/compose.override.yml
+        -p {{ stack_name }} down
+      ignore_errors: true
+
+    - name: Build and start containers
+      command: >
+        docker compose -f {{ project_dir }}/compose.yml
+        -f {{ project_dir }}/compose.override.yml
+        -p {{ stack_name }} up -d --build
+      environment:
+        VITE_API_URL: "{{ vite_api_url }}"
+
+    - name: Verify containers are running
+      command: docker compose -p {{ stack_name }} ps
+      register: compose_output
+
+    - name: Show running containers
+      debug:
+        msg: "{{ compose_output.stdout }}"
