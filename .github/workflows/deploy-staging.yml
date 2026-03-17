@@ -1,8 +1,10 @@
 name: Deploy to Staging
+
 on:
   push:
     branches:
       - main
+
 jobs:
   deploy:
     # Do not deploy in the main repository, only in user projects
@@ -25,17 +27,13 @@ jobs:
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
     steps:
       - name: Fix permissions
-        run: |
-          sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
-          sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
-          sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
-
+          run: |
+            sudo rm -rf ${{ github.workspace }}/frontend/blob-report || true
+            sudo rm -rf ${{ github.workspace }}/frontend/test-results || true
+            sudo chown -R $USER:$USER ${{ github.workspace }} || true
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install Ansible Docker collection
-        run: ansible-galaxy collection install community.docker
-
-      - name: Run Ansible deployment
-        run: |
-          ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
+      - name: Create Traefik network
+        run: docker network create traefik-public || true
+      - run: docker compose -f compose.yml -f compose.override.yml --project-name ${{ secrets.STACK_NAME_STAGING }} build
+      - run: docker compose -f compose.yml -f compose.override.yml --project-name ${{ secrets.STACK_NAME_STAGING }} up -d
