@@ -129,7 +129,54 @@ services:
     ports:
       - 9323:9323
 
+  prometheus:
+    image: prom/prometheus:latest
+    restart: "no"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - traefik-public
+      - default
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: "no"
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - traefik-public
+      - default
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    restart: "no"
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - traefik-public
+      - default
+
+volumes:
+  grafana-data:
+    name: myapp-staging_grafana-data
+
 networks:
   traefik-public:
     # For local dev, don't expect an external Traefik network
     external: false
+
