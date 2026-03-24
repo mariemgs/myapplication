@@ -5,7 +5,6 @@ on:
       - main
 jobs:
   deploy:
-    # Do not deploy in the main repository, only in user projects
     if: github.repository_owner != 'fastapi'
     runs-on:
       - self-hosted
@@ -37,13 +36,13 @@ jobs:
         run: docker network create traefik-public || true
 
       - name: Stop existing containers
-        run: docker compose -f compose.yml -f compose.override.yml --project-name ${{ secrets.STACK_NAME_STAGING }} down || true
+        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
 
       - name: Remove old db volume
-        run: docker volume rm ${{ secrets.STACK_NAME_STAGING }}_app-db-data || true
+        run: docker volume rm myapp-staging_app-db-data || true
 
       - name: Build
-        run: docker compose -f compose.yml -f compose.override.yml --project-name ${{ secrets.STACK_NAME_STAGING }} build
+        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging build
 
       - name: Deploy
-        run: docker compose -f compose.yml -f compose.override.yml --project-name ${{ secrets.STACK_NAME_STAGING }} up -d
+        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d

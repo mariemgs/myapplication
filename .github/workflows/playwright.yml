@@ -101,8 +101,9 @@ jobs:
         run: |
           cd /home/meriemguesmi/projects/full-stack-fastapi-template
           docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
+          docker volume rm myapp-staging_app-db-data || true
           sleep 5
-          VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
+          VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d 
   merge-playwright-reports:
     needs:
       - test-playwright
