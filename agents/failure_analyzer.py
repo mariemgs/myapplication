@@ -43,7 +43,7 @@ def get_failed_logs():
 
 def analyze_with_gemini(logs):
     """Send logs to Gemini for analysis"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
     
     prompt = f"""You are a DevOps expert analyzing a CI/CD pipeline failure.
 
