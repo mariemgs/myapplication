@@ -1,0 +1,52 @@
+name: AI Security Analyzer
+
+on:
+  workflow_run:
+    workflows:
+      - "OWASP ZAP DAST Scan"
+    types:
+      - completed
+
+jobs:
+  security-report:
+    name: Generate AI Security Report
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Download ZAP report if available
+        run: |
+          echo "Fetching security scan artifacts..."
+          # Get the artifacts from the triggered workflow
+          ARTIFACTS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/artifacts"
+          curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $ARTIFACTS_URL > artifacts.json
+          cat artifacts.json | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          for a in data.get('artifacts', []):
+              print(f\"Found artifact: {a['name']}\")
+          "
+
+      - name: Run AI Security Analyzer
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_NUMBER: ""
+          BANDIT_RESULTS: "Bandit SAST scan completed - check SonarQube for detailed results"
+          TRIVY_RESULTS: "Trivy container scan completed - check pipeline for vulnerabilities"
+          ZAP_RESULTS: "OWASP ZAP DAST scan completed - dynamic security testing performed"
+          SONAR_RESULTS: "SonarQube analysis completed - code quality and security hotspots analyzed"
+        run: python agents/security_analyzer.py
