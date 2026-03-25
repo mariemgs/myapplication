@@ -46,5 +46,3 @@ jobs:
 
       - name: Deploy
         run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
-      - name: intentional break
-        run: exit 1
