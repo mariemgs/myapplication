@@ -15,10 +15,12 @@ jobs:
   analyze:
     name: Analyze Pipeline Failure
     runs-on: ubuntu-latest
+
+    # Only run if workflow failed
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -27,14 +29,26 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests
+        run: |
+          pip install requests
+
+      - name: Debug event (optional but useful)
+        run: |
+          echo "Workflow: ${{ github.event.workflow_run.name }}"
+          echo "Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "Run ID: ${{ github.event.workflow_run.id }}"
 
       - name: Run AI Failure Analyzer
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+          # IMPORTANT: use workflow_run context
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID: ${{ github.event.workflow_run.id }}
           GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
-          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+
+          # SAFE PR handling (fixes crashes)
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests && github.event.workflow_run.pull_requests[0] && github.event.workflow_run.pull_requests[0].number || '' }}
+
         run: python agents/failure_analyzer.py
