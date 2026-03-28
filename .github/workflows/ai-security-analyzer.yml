@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - "OWASP ZAP DAST Scan"
+      - "Test Backend"
     types:
       - completed
 
@@ -25,18 +26,73 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Download ZAP report if available
+      - name: Download security reports
         run: |
-          echo "Fetching security scan artifacts..."
-          # Get the artifacts from the triggered workflow
+          # Download artifacts from the triggered workflow
           ARTIFACTS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/artifacts"
+          
           curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $ARTIFACTS_URL > artifacts.json
-          cat artifacts.json | python3 -c "
+          
+          # Find and download security-reports artifact
+          ARTIFACT_URL=$(python3 -c "
+          import json
+          with open('artifacts.json') as f:
+              data = json.load(f)
+          for a in data.get('artifacts', []):
+              if a['name'] == 'security-reports':
+                  print(a['archive_download_url'])
+                  break
+          ")
+          
+          if [ -n "$ARTIFACT_URL" ]; then
+              echo "Downloading security reports..."
+              curl -s -L -H "Authorization: token ${{ secrets.GH_PAT }}" \
+                   "$ARTIFACT_URL" -o security-reports.zip
+              unzip -o security-reports.zip -d security-reports/
+              ls security-reports/
+          else
+              echo "No security reports found"
+              mkdir -p security-reports
+          fi
+
+      - name: Read security reports
+        id: read-reports
+        run: |
+          # Read Bandit report
+          if [ -f security-reports/bandit-report.json ]; then
+              BANDIT=$(cat security-reports/bandit-report.json | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
-          for a in data.get('artifacts', []):
-              print(f\"Found artifact: {a['name']}\")
-          "
+          results = data.get('results', [])
+          issues = [f\"{r['issue_severity']} - {r['issue_text']} in {r['filename']}:{r['line_number']}\" for r in results[:10]]
+          print('\n'.join(issues) if issues else 'No issues found')
+          ")
+          else
+              BANDIT="Bandit report not available"
+          fi
+          
+          # Read pip-audit report
+          if [ -f security-reports/pip-audit-report.json ]; then
+              PIPAUDIT=$(cat security-reports/pip-audit-report.json | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          vulns = []
+          for dep in data:
+              for v in dep.get('vulns', []):
+                  vulns.append(f\"{dep['name']} {dep['version']}: {v['id']} - {v['description'][:100]}\")
+          print('\n'.join(vulns[:10]) if vulns else 'No vulnerabilities found')
+          ")
+          else
+              PIPAUDIT="pip-audit report not available"
+          fi
+          
+          echo "BANDIT_RESULTS<<EOF" >> $GITHUB_ENV
+          echo "$BANDIT" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
+          echo "TRIVY_RESULTS<<EOF" >> $GITHUB_ENV
+          echo "$PIPAUDIT" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Run AI Security Analyzer
         env:
@@ -45,8 +101,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
           PR_NUMBER: ""
-          BANDIT_RESULTS: "Bandit SAST scan completed - check SonarQube for detailed results"
-          TRIVY_RESULTS: "Trivy container scan completed - check pipeline for vulnerabilities"
-          ZAP_RESULTS: "OWASP ZAP DAST scan completed - dynamic security testing performed"
-          SONAR_RESULTS: "SonarQube analysis completed - code quality and security hotspots analyzed"
+          BANDIT_RESULTS: ${{ env.BANDIT_RESULTS }}
+          TRIVY_RESULTS: ${{ env.TRIVY_RESULTS }}
+          ZAP_RESULTS: "OWASP ZAP DAST scan completed"
+          SONAR_RESULTS: "SonarQube analysis completed"
         run: python agents/security_analyzer.py

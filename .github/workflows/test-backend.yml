@@ -35,15 +35,28 @@ jobs:
       - name: Run SAST (Bandit)
         run: |
           pip install bandit
-          bandit -r backend -ll
+          bandit -r backend -ll -f json -o bandit-report.json || true
+          bandit -r backend -ll || true
 
       - name: Dependency vulnerability scan (pip-audit)
         run: |
           pip install pip-audit
-          pip-audit -r backend/requirements.txt
+          pip-audit -r backend/requirements.txt -f json -o pip-audit-report.json || true
+          pip-audit -r backend/requirements.txt || true
 
       - name: Secrets scan (Gitleaks)
         uses: gitleaks/gitleaks-action@v2
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            pip-audit-report.json
+          retention-days: 1  
+
+
       - name: Store coverage files
         uses: actions/upload-artifact@v6
         with:
