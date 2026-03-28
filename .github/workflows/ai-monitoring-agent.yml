@@ -1,0 +1,31 @@
+name: AI Monitoring Agent
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # Every 30 minutes
+  workflow_dispatch:          # Manual trigger
+
+jobs:
+  monitor:
+    name: Monitor App Health
+    runs-on: self-hosted      # Needs access to your VM's Prometheus
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run AI Monitoring Agent
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PROMETHEUS_URL: "http://192.168.29.131:9090"
+        run: python agents/monitoring_agent.py
