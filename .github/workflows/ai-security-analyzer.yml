@@ -4,7 +4,6 @@ on:
   workflow_run:
     workflows:
       - "OWASP ZAP DAST Scan"
-      - "Test Backend"
     types:
       - completed
 
@@ -26,56 +25,97 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Download security reports
+      - name: Download ZAP report
         run: |
-          # Download artifacts from the triggered workflow
           ARTIFACTS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/artifacts"
-          
-          curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $ARTIFACTS_URL > artifacts.json
-          
-          # Find and download security-reports artifact
-          ARTIFACT_URL=$(python3 -c "
+          curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $ARTIFACTS_URL > zap-artifacts.json
+
+          ZAP_URL=$(python3 -c "
           import json
-          with open('artifacts.json') as f:
+          with open('zap-artifacts.json') as f:
+              data = json.load(f)
+          for a in data.get('artifacts', []):
+              if a['name'] == 'zap-report':
+                  print(a['archive_download_url'])
+                  break
+          ")
+
+          if [ -n "$ZAP_URL" ]; then
+              echo "Downloading ZAP report..."
+              curl -s -L -H "Authorization: token ${{ secrets.GH_PAT }}" "$ZAP_URL" -o zap-report.zip
+              unzip -o zap-report.zip -d zap-report/
+              ls zap-report/
+          else
+              echo "No ZAP report found"
+              mkdir -p zap-report
+          fi
+
+      - name: Download Test Backend security reports
+        run: |
+          # Find the latest Test Backend run for this commit
+          RUNS_URL="https://api.github.com/repos/${{ github.repository }}/actions/workflows/test-backend.yml/runs?head_sha=${{ github.event.workflow_run.head_sha }}&per_page=1"
+          curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $RUNS_URL > backend-runs.json
+
+          RUN_ID=$(python3 -c "
+          import json
+          with open('backend-runs.json') as f:
+              data = json.load(f)
+          runs = data.get('workflow_runs', [])
+          if runs:
+              print(runs[0]['id'])
+          ")
+
+          if [ -n "$RUN_ID" ]; then
+              echo "Found Test Backend run: $RUN_ID"
+              ARTIFACTS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts"
+              curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $ARTIFACTS_URL > backend-artifacts.json
+
+              ARTIFACT_URL=$(python3 -c "
+          import json
+          with open('backend-artifacts.json') as f:
               data = json.load(f)
           for a in data.get('artifacts', []):
               if a['name'] == 'security-reports':
                   print(a['archive_download_url'])
                   break
           ")
-          
-          if [ -n "$ARTIFACT_URL" ]; then
-              echo "Downloading security reports..."
-              curl -s -L -H "Authorization: token ${{ secrets.GH_PAT }}" \
-                   "$ARTIFACT_URL" -o security-reports.zip
-              unzip -o security-reports.zip -d security-reports/
-              ls security-reports/
+
+              if [ -n "$ARTIFACT_URL" ]; then
+                  echo "Downloading security reports..."
+                  curl -s -L -H "Authorization: token ${{ secrets.GH_PAT }}" "$ARTIFACT_URL" -o security-reports.zip
+                  unzip -o security-reports.zip -d security-reports/
+                  ls security-reports/
+              else
+                  echo "No security reports found"
+                  mkdir -p security-reports
+              fi
           else
-              echo "No security reports found"
+              echo "No Test Backend run found for this commit"
               mkdir -p security-reports
           fi
 
       - name: Read security reports
-        id: read-reports
         run: |
           # Read Bandit report
           if [ -f security-reports/bandit-report.json ]; then
-              BANDIT=$(cat security-reports/bandit-report.json | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
+            BANDIT=$(python3 -c "
+          import json
+          with open('security-reports/bandit-report.json') as f:
+              data = json.load(f)
           results = data.get('results', [])
           issues = [f\"{r['issue_severity']} - {r['issue_text']} in {r['filename']}:{r['line_number']}\" for r in results[:10]]
           print('\n'.join(issues) if issues else 'No issues found')
           ")
           else
-              BANDIT="Bandit report not available"
+            BANDIT="Bandit report not available"
           fi
-          
+
           # Read pip-audit report
           if [ -f security-reports/pip-audit-report.json ]; then
-              PIPAUDIT=$(cat security-reports/pip-audit-report.json | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
+            PIPAUDIT=$(python3 -c "
+          import json
+          with open('security-reports/pip-audit-report.json') as f:
+              data = json.load(f)
           vulns = []
           for dep in data:
               for v in dep.get('vulns', []):
@@ -83,15 +123,46 @@ jobs:
           print('\n'.join(vulns[:10]) if vulns else 'No vulnerabilities found')
           ")
           else
-              PIPAUDIT="pip-audit report not available"
+            PIPAUDIT="pip-audit report not available"
           fi
-          
+
+          # Read Trivy report
+          if [ -f security-reports/trivy-report.json ]; then
+            TRIVY=$(python3 -c "
+          import json
+          with open('security-reports/trivy-report.json') as f:
+              data = json.load(f)
+          vulns = []
+          for result in data.get('Results', []):
+              for v in result.get('Vulnerabilities', [])[:5]:
+                  vulns.append(f\"{v.get('Severity','?')} - {v.get('VulnerabilityID','?')}: {v.get('Title','?')[:80]}\")
+          print('\n'.join(vulns[:10]) if vulns else 'No vulnerabilities found')
+          ")
+          else
+            TRIVY="Trivy report not available"
+          fi
+
+          # Check ZAP report
+          if [ -f zap-report/report_html.html ]; then
+            ZAP="OWASP ZAP scan completed successfully - dynamic security testing performed on running application"
+          else
+            ZAP="ZAP report not available"
+          fi
+
           echo "BANDIT_RESULTS<<EOF" >> $GITHUB_ENV
           echo "$BANDIT" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
-          
+
           echo "TRIVY_RESULTS<<EOF" >> $GITHUB_ENV
+          echo "$TRIVY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          echo "PIPAUDIT_RESULTS<<EOF" >> $GITHUB_ENV
           echo "$PIPAUDIT" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          echo "ZAP_RESULTS<<EOF" >> $GITHUB_ENV
+          echo "$ZAP" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       - name: Run AI Security Analyzer
@@ -103,6 +174,6 @@ jobs:
           PR_NUMBER: ""
           BANDIT_RESULTS: ${{ env.BANDIT_RESULTS }}
           TRIVY_RESULTS: ${{ env.TRIVY_RESULTS }}
-          ZAP_RESULTS: "OWASP ZAP DAST scan completed"
-          SONAR_RESULTS: "SonarQube analysis completed"
+          ZAP_RESULTS: ${{ env.ZAP_RESULTS }}
+          SONAR_RESULTS: "SonarQube analysis completed - check sonarcloud.io for details"
         run: python agents/security_analyzer.py
