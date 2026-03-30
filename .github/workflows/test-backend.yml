@@ -1,50 +1,59 @@
 name: Test Backend
+
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    types:
-      - opened
-      - synchronize
+    types: [opened, synchronize]
+
 jobs:
   test-backend:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
+
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v1
+
       - run: docker compose down -v --remove-orphans
       - run: docker compose up -d db mailcatcher
+
       - name: Migrate DB
+        working-directory: backend
         run: uv run bash scripts/prestart.sh
-        working-directory: backend
+
       - name: Run tests
-        run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         working-directory: backend
+        run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+
       - run: docker compose down -v --remove-orphans
 
-      #adding security tests
+      # 🔐 SAST
       - name: Run SAST (Bandit)
         run: |
-          pip install bandit
-          bandit -r backend -ll -f json -o bandit-report.json || true
-          bandit -r backend -ll || true
+          uv pip install bandit
+          uv run bandit -r backend -ll -f json -o bandit-report.json || true
+          uv run bandit -r backend -ll || true
 
-      - name: Dependency vulnerability scan (pip-audit)
+      # 📦 Dependencies scan
+      - name: Dependency scan (pip-audit)
         run: |
-          pip install pip-audit
-          pip-audit -f json -o pip-audit-report.json || true
-          pip-audit || true
+          uv pip install pip-audit
+          uv run pip-audit -f json -o pip-audit-report.json || true
+          uv run pip-audit || true
 
+      # 🔑 Secrets scan
       - name: Secrets scan (Gitleaks)
         uses: gitleaks/gitleaks-action@v2
 
+      # 📁 Upload reports
       - name: Upload security reports
         uses: actions/upload-artifact@v4
         if: always()
@@ -55,13 +64,15 @@ jobs:
             pip-audit-report.json
           retention-days: 1
 
+      # 📊 Coverage artifacts
       - name: Store coverage files
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-html
           path: backend/htmlcov
           include-hidden-files: true
 
+      # 📉 Coverage check (optional strict)
       - name: Coverage report
-        run: uv run coverage report --fail-under=90
         working-directory: backend
+        run: uv run coverage report --fail-under=90
