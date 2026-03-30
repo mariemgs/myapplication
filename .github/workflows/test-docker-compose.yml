@@ -26,7 +26,19 @@ jobs:
         with:
           image-ref: ci-backend:latest
           severity: CRITICAL,HIGH
-          exit-code: 1
+          exit-code: '1'
+          format: json
+          output: trivy-image-report.json
+          trivyignores: .trivyignore
+
+      - name: Upload Trivy image report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-image-report
+          path: trivy-image-report.json
+          retention-days: 1
+          
       - run: docker compose down -v --remove-orphans
       - run: docker compose up -d --wait backend frontend adminer
       - name: Test backend is up

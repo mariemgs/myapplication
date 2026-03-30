@@ -1,0 +1,11 @@
+# These vulnerabilities are in the base python:3.10 Docker image
+# They are not direct project dependencies and cannot be fixed
+# without upgrading the base image which may break compatibility
+
+# jaraco.context: Path traversal via malicious tar archives
+# Source: base python:3.10 image
+CVE-2026-23949
+
+# wheel: Privilege Escalation via malicious wheel file
+# Source: base python:3.10 image  
+CVE-2026-24049

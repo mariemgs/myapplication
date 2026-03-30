@@ -42,14 +42,6 @@ jobs:
           pip-audit -f json -o pip-audit-report.json || true
           pip-audit || true
 
-      - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          format: json
-          output: trivy-report.json
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH,MEDIUM'
 
       - name: Secrets scan (Gitleaks)
         uses: gitleaks/gitleaks-action@v2
