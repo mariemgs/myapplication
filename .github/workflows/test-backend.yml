@@ -42,7 +42,6 @@ jobs:
           pip-audit -f json -o pip-audit-report.json || true
           pip-audit || true
 
-
       - name: Secrets scan (Gitleaks)
         uses: gitleaks/gitleaks-action@v2
 
@@ -54,7 +53,6 @@ jobs:
           path: |
             bandit-report.json
             pip-audit-report.json
-            trivy-report.json
           retention-days: 1
 
       - name: Store coverage files
