@@ -40,6 +40,12 @@ jobs:
 
       # 1. Start Services
       # Ensure --build is used to include the 'tests' folder from your Dockerfile
+      - name: Pre-test cleanup
+        run: |
+          sudo rm -rf ./backend/htmlcov || true
+          sudo chown -R $USER:$USER . || true
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Start Services
         run: |
           docker compose down -v --remove-orphans
@@ -57,9 +63,12 @@ jobs:
       - name: Copy coverage from container
         if: always()
         run: |
+          # Create directory with user permissions
           mkdir -p ./backend/htmlcov
-          # We use /. to copy the folder contents specifically
+          # Copy from container (which runs as root)
           docker cp $(docker compose ps -q backend):/app/backend/htmlcov/. ./backend/htmlcov
+          # Give ownership back to the user so GitHub can upload it
+          sudo chown -R $USER:$USER ./backend/htmlcov
 
       # 5. Security Scans
       - name: Run SAST (Bandit)
@@ -97,8 +106,7 @@ jobs:
         with:
           name: coverage-html
           path: backend/htmlcov
-          include-hidden-files: true
-
+          
       # 7. Final Coverage Check & Cleanup
       - name: Coverage report check
         run: docker compose exec -T backend uv run coverage report --fail-under=90
