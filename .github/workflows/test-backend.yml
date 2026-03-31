@@ -48,8 +48,7 @@ jobs:
 
       # 2. Run Database Migrations
       - name: Migrate DB
-        # We tell the container to 'cd' into the backend folder before running the script
-        run: docker compose exec -T backend sh -c "cd backend && bash scripts/prestart.sh"
+        run: docker compose exec -T backend bash scripts/prestart.sh
 
       # 3. Run Tests
       - name: Run tests
