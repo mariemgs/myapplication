@@ -63,11 +63,9 @@ jobs:
       - name: Copy coverage from container
         if: always()
         run: |
-          # Create directory with user permissions
+          sudo rm -rf ./backend/htmlcov || true
           mkdir -p ./backend/htmlcov
-          # Copy from container (which runs as root)
           docker cp $(docker compose ps -q backend):/app/backend/htmlcov/. ./backend/htmlcov
-          # Give ownership back to the user so GitHub can upload it
           sudo chown -R $USER:$USER ./backend/htmlcov
 
       # 5. Security Scans
@@ -106,7 +104,7 @@ jobs:
         with:
           name: coverage-html
           path: backend/htmlcov
-          
+
       # 7. Final Coverage Check & Cleanup
       - name: Coverage report check
         run: docker compose exec -T backend uv run coverage report --fail-under=90
