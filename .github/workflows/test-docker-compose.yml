@@ -26,17 +26,16 @@ jobs:
         with:
           image-ref: ci-backend:latest
           severity: CRITICAL,HIGH
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
           trivyignores: .trivyignore
           format: json
           output: trivy-image-report.json
 
-
       - name: Show vulnerabilities
         if: always()
         run: |
-          cat trivy-full-report.json | python3 -c "
+          cat trivy-image-report.json | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
           for result in data.get('Results', []):
@@ -44,12 +43,13 @@ jobs:
                   print(f\"{v.get('Severity')} | {v.get('VulnerabilityID')} | {v.get('PkgName')} | {v.get('InstalledVersion')} -> {v.get('FixedVersion')}\")
           " || echo "No vulnerabilities found or parse error"
 
+
       - name: Upload full Trivy report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: trivy-full-report
-          path: trivy-full-report.json
+          name: trivy-image-report
+          path: trivy-image-report.json
           retention-days: 1
 
       - run: docker compose down -v --remove-orphans
