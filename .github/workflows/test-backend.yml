@@ -52,14 +52,14 @@ jobs:
 
       # 3. Run Tests
       - name: Run tests
-        # We do the same here so pytest finds the 'tests/' folder inside 'backend/'
-        run: docker compose exec -T backend sh -c "cd backend && uv run bash scripts/tests-start.sh 'Coverage for ${{ github.sha }}'"
-
+        # Pytest will now find the 'tests/' folder because you are in /app/backend/
+        run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+        
       # 4. Extract Coverage
       - name: Copy coverage from container
-        # Ensure the source path matches where the container generated the htmlcov
+        # Source: /app/backend/htmlcov
+        # Destination: ./backend/htmlcov (on the GitHub Runner)
         run: docker cp $(docker compose ps -q backend):/app/backend/htmlcov ./backend/htmlcov
-
       # 5. Security Scans
       # These run on the GitHub Runner Host
       - name: Run SAST (Bandit)
