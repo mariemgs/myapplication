@@ -48,16 +48,17 @@ jobs:
 
       # 2. Run Database Migrations
       - name: Migrate DB
-        run: docker compose exec -T backend bash scripts/prestart.sh
+        # We tell the container to 'cd' into the backend folder before running the script
+        run: docker compose exec -T backend sh -c "cd backend && bash scripts/prestart.sh"
 
       # 3. Run Tests
-      # Since we run inside the container, 'db' hostname will resolve correctly
       - name: Run tests
-        run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+        # We do the same here so pytest finds the 'tests/' folder inside 'backend/'
+        run: docker compose exec -T backend sh -c "cd backend && uv run bash scripts/tests-start.sh 'Coverage for ${{ github.sha }}'"
 
-      # 4. Extract Coverage (Crucial)
-      # Coverage files are currently INSIDE the container. We need them on the host to upload.
+      # 4. Extract Coverage
       - name: Copy coverage from container
+        # Ensure the source path matches where the container generated the htmlcov
         run: docker cp $(docker compose ps -q backend):/app/backend/htmlcov ./backend/htmlcov
 
       # 5. Security Scans
