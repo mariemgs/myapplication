@@ -12,7 +12,6 @@ on:
 jobs:
   test-backend:
     runs-on: ubuntu-latest
-    # Define required variables for your docker-compose.yml placeholders
     env:
       DOMAIN: localhost
       STACK_NAME: my-app
@@ -29,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # Updated to v4 (v6 doesn't exist)
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,12 +38,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      # 1. Start the backend infrastructure
-      # We must start 'backend' so we can 'exec' into it later
+      # 1. Start Services
+      # Ensure --build is used to include the 'tests' folder from your Dockerfile
       - name: Start Services
         run: |
           docker compose down -v --remove-orphans
-          # Add --build to ensure the new Dockerfile changes (copying tests) are applied
           docker compose up -d db mailcatcher backend --build
 
       # 2. Run Database Migrations
@@ -53,26 +51,28 @@ jobs:
 
       # 3. Run Tests
       - name: Run tests
-        # Pytest will now find the 'tests/' folder because you are in /app/backend/
         run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         
-      # 4. Extract Coverage
+      # 4. Extract Coverage (Fixed Permissions & Path)
       - name: Copy coverage from container
-        # Source: /app/backend/htmlcov
-        # Destination: ./backend/htmlcov (on the GitHub Runner)
-        run: docker cp $(docker compose ps -q backend):/app/backend/htmlcov ./backend/htmlcov
+        if: always()
+        run: |
+          mkdir -p ./backend/htmlcov
+          # We use /. to copy the folder contents specifically
+          docker cp $(docker compose ps -q backend):/app/backend/htmlcov/. ./backend/htmlcov
 
       # 5. Security Scans
-      # These run on the GitHub Runner Host
       - name: Run SAST (Bandit)
         run: |
           pip install bandit
+          # Scanning the local backend directory on the runner host
           bandit -r backend -ll -f json -o bandit-report.json || true
           bandit -r backend -ll || true
 
       - name: Dependency vulnerability scan (pip-audit)
         run: |
           pip install pip-audit
+          # Pointing to the requirements/dependencies in the backend folder
           pip-audit -f json -o pip-audit-report.json || true
 
       - name: Secrets scan (Gitleaks)
@@ -92,14 +92,15 @@ jobs:
           retention-days: 1
 
       - name: Store coverage files
-        uses: actions/upload-artifact@v4 # Updated from v6 to v4
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: coverage-html
           path: backend/htmlcov
           include-hidden-files: true
 
       # 7. Final Coverage Check & Cleanup
-      - name: Coverage report
+      - name: Coverage report check
         run: docker compose exec -T backend uv run coverage report --fail-under=90
 
       - name: Stop Services
