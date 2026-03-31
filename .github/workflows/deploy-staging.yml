@@ -22,6 +22,7 @@ jobs:
       EMAILS_FROM_EMAIL: ${{ secrets.EMAILS_FROM_EMAIL }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+
     steps:
       - name: Fix permissions
         run: |
@@ -34,6 +35,16 @@ jobs:
 
       - name: Create Traefik network
         run: docker network create traefik-public || true
+
+      # NEW STEP: Clear the database port specifically
+      - name: Force clear DB port
+        run: |
+          # Finds any container ID using port 5432 and stops it
+          CONTAINER_ID=$(docker ps -q --filter "publish=5432")
+          if [ ! -z "$CONTAINER_ID" ]; then
+            echo "Stopping container $CONTAINER_ID which is holding port 5432..."
+            docker stop $CONTAINER_ID || true
+          fi
 
       - name: Stop existing containers
         run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
