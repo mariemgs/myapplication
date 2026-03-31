@@ -53,7 +53,7 @@ jobs:
         chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
-    - uses: actions/setup-python@v4
+    - uses: actions/setup-python@v6
       with:
         python-version: '3.10'
     - name: Setup tmate session
@@ -147,7 +147,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.10'
       - name: Decide whether the needed jobs succeeded or failed
