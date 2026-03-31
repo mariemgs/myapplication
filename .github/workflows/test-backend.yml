@@ -44,6 +44,7 @@ jobs:
       - name: Start Services
         run: |
           docker compose down -v --remove-orphans
+          # Add --build to ensure the new Dockerfile changes (copying tests) are applied
           docker compose up -d db mailcatcher backend --build
 
       # 2. Run Database Migrations
@@ -60,6 +61,7 @@ jobs:
         # Source: /app/backend/htmlcov
         # Destination: ./backend/htmlcov (on the GitHub Runner)
         run: docker cp $(docker compose ps -q backend):/app/backend/htmlcov ./backend/htmlcov
+
       # 5. Security Scans
       # These run on the GitHub Runner Host
       - name: Run SAST (Bandit)
