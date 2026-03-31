@@ -2,17 +2,34 @@ name: Test Backend
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    types: [opened, synchronize]
+    types:
+      - opened
+      - synchronize
 
 jobs:
   test-backend:
     runs-on: ubuntu-latest
+    # Define required variables for your docker-compose.yml placeholders
+    env:
+      DOMAIN: localhost
+      STACK_NAME: my-app
+      SECRET_KEY: changeme
+      FIRST_SUPERUSER: admin@example.com
+      FIRST_SUPERUSER_PASSWORD: changeme
+      POSTGRES_SERVER: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: changeme
+      DOCKER_IMAGE_BACKEND: backend
+      DOCKER_IMAGE_FRONTEND: frontend
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 # Updated to v4 (v6 doesn't exist)
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -20,40 +37,48 @@ jobs:
           python-version: "3.10"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v1
+        uses: astral-sh/setup-uv@v5
 
-      - run: docker compose down -v --remove-orphans
-      - run: docker compose up -d db mailcatcher
+      # 1. Start the backend infrastructure
+      # We must start 'backend' so we can 'exec' into it later
+      - name: Start Services
+        run: |
+          docker compose down -v --remove-orphans
+          docker compose up -d db mailcatcher backend --build
 
+      # 2. Run Database Migrations
       - name: Migrate DB
-        working-directory: backend
-        run: uv run bash scripts/prestart.sh
+        run: docker compose exec -T backend bash scripts/prestart.sh
 
+      # 3. Run Tests
+      # Since we run inside the container, 'db' hostname will resolve correctly
       - name: Run tests
-        working-directory: backend
-        run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+        run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
 
-      - run: docker compose down -v --remove-orphans
+      # 4. Extract Coverage (Crucial)
+      # Coverage files are currently INSIDE the container. We need them on the host to upload.
+      - name: Copy coverage from container
+        run: docker cp $(docker compose ps -q backend):/app/backend/htmlcov ./backend/htmlcov
 
-      # 🔐 SAST
+      # 5. Security Scans
+      # These run on the GitHub Runner Host
       - name: Run SAST (Bandit)
         run: |
-          uv pip install bandit
-          uv run bandit -r backend -ll -f json -o bandit-report.json || true
-          uv run bandit -r backend -ll || true
+          pip install bandit
+          bandit -r backend -ll -f json -o bandit-report.json || true
+          bandit -r backend -ll || true
 
-      # 📦 Dependencies scan
-      - name: Dependency scan (pip-audit)
+      - name: Dependency vulnerability scan (pip-audit)
         run: |
-          uv pip install pip-audit
-          uv run pip-audit -f json -o pip-audit-report.json || true
-          uv run pip-audit || true
+          pip install pip-audit
+          pip-audit -f json -o pip-audit-report.json || true
 
-      # 🔑 Secrets scan
       - name: Secrets scan (Gitleaks)
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 📁 Upload reports
+      # 6. Artifact Uploads
       - name: Upload security reports
         uses: actions/upload-artifact@v4
         if: always()
@@ -64,15 +89,17 @@ jobs:
             pip-audit-report.json
           retention-days: 1
 
-      # 📊 Coverage artifacts
       - name: Store coverage files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4 # Updated from v6 to v4
         with:
           name: coverage-html
           path: backend/htmlcov
           include-hidden-files: true
 
-      # 📉 Coverage check (optional strict)
+      # 7. Final Coverage Check & Cleanup
       - name: Coverage report
-        working-directory: backend
-        run: uv run coverage report --fail-under=90
+        run: docker compose exec -T backend uv run coverage report --fail-under=90
+
+      - name: Stop Services
+        if: always()
+        run: docker compose down -v --remove-orphans
