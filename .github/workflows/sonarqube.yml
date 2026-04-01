@@ -59,7 +59,7 @@ jobs:
             -Dsonar.python.coverage.reportPaths=coverage.xml
             -Dsonar.sources=backend/app
             -Dsonar.tests=backend/tests
-            -Dsonar.projectKey=mariemgs
+            -Dsonar.projectKey=mariemgs_myapplication
 
 
      # - name: SonarQube Quality Gate Check
