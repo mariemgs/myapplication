@@ -102,6 +102,56 @@ jobs:
               mkdir -p security-reports
           fi
 
+
+
+      - name: Download Trivy image report
+        run: |
+          # Find the latest Test Docker Compose run for this commit
+          RUNS_URL="https://api.github.com/repos/${{ github.repository }}/actions/workflows/test-docker-compose.yml/runs?head_sha=${{ github.event.workflow_run.head_sha }}&per_page=1"
+          curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $RUNS_URL > docker-runs.json
+
+          RUN_ID=$(python3 -c "
+          import json
+          try:
+              with open('docker-runs.json') as f:
+                  data = json.load(f)
+              runs = data.get('workflow_runs', [])
+              if runs:
+                  print(runs[0]['id'])
+          except Exception:
+              pass
+          ")
+
+          if [ -n "$RUN_ID" ]; then
+              echo "Found Test Docker Compose run: $RUN_ID"
+              ARTIFACTS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts"
+              curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $ARTIFACTS_URL > docker-artifacts.json
+
+              ARTIFACT_URL=$(python3 -c "
+          import json
+          try:
+              with open('docker-artifacts.json') as f:
+                  data = json.load(f)
+              for a in data.get('artifacts', []):
+                  if a['name'] == 'trivy-image-report':
+                      print(a['archive_download_url'])
+                      break
+          except Exception:
+              pass
+          ")
+
+              if [ -n "$ARTIFACT_URL" ]; then
+                  echo "Downloading Trivy image report..."
+                  curl -s -L -H "Authorization: token ${{ secrets.GH_PAT }}" "$ARTIFACT_URL" -o trivy-report.zip
+                  unzip -o trivy-report.zip -d security-reports/ || true
+                  ls security-reports/ || true
+              else
+                  echo "No Trivy image report found"
+              fi
+          else
+              echo "No Test Docker Compose run found for this commit"
+          fi    
+
       - name: Read security reports
         run: |
           # Read Bandit report
@@ -145,11 +195,11 @@ jobs:
           fi
 
           # Read Trivy report
-          if [ -f security-reports/trivy-report.json ]; then
+          if [ -f security-reports/trivy-image-report.json ]; then
             TRIVY=$(python3 -c "
           import json
           try:
-              with open('security-reports/trivy-report.json') as f:
+              with open('security-reports/trivy-image-report.json') as f:
                   data = json.load(f)
               vulns = []
               if isinstance(data, dict):
