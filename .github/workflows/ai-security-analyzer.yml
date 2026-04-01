@@ -32,19 +32,22 @@ jobs:
 
           ZAP_URL=$(python3 -c "
           import json
-          with open('zap-artifacts.json') as f:
-              data = json.load(f)
-          for a in data.get('artifacts', []):
-              if a['name'] == 'zap-report':
-                  print(a['archive_download_url'])
-                  break
+          try:
+              with open('zap-artifacts.json') as f:
+                  data = json.load(f)
+              for a in data.get('artifacts', []):
+                  if a['name'] == 'zap-report':
+                      print(a['archive_download_url'])
+                      break
+          except Exception as e:
+              print('')
           ")
 
           if [ -n "$ZAP_URL" ]; then
               echo "Downloading ZAP report..."
               curl -s -L -H "Authorization: token ${{ secrets.GH_PAT }}" "$ZAP_URL" -o zap-report.zip
-              unzip -o zap-report.zip -d zap-report/
-              ls zap-report/
+              unzip -o zap-report.zip -d zap-report/ || true
+              ls zap-report/ || true
           else
               echo "No ZAP report found"
               mkdir -p zap-report
@@ -52,17 +55,19 @@ jobs:
 
       - name: Download Test Backend security reports
         run: |
-          # Find the latest Test Backend run for this commit
           RUNS_URL="https://api.github.com/repos/${{ github.repository }}/actions/workflows/test-backend.yml/runs?head_sha=${{ github.event.workflow_run.head_sha }}&per_page=1"
           curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $RUNS_URL > backend-runs.json
 
           RUN_ID=$(python3 -c "
           import json
-          with open('backend-runs.json') as f:
-              data = json.load(f)
-          runs = data.get('workflow_runs', [])
-          if runs:
-              print(runs[0]['id'])
+          try:
+              with open('backend-runs.json') as f:
+                  data = json.load(f)
+              runs = data.get('workflow_runs', [])
+              if runs:
+                  print(runs[0]['id'])
+          except Exception:
+              pass
           ")
 
           if [ -n "$RUN_ID" ]; then
@@ -72,19 +77,22 @@ jobs:
 
               ARTIFACT_URL=$(python3 -c "
           import json
-          with open('backend-artifacts.json') as f:
-              data = json.load(f)
-          for a in data.get('artifacts', []):
-              if a['name'] == 'security-reports':
-                  print(a['archive_download_url'])
-                  break
+          try:
+              with open('backend-artifacts.json') as f:
+                  data = json.load(f)
+              for a in data.get('artifacts', []):
+                  if a['name'] == 'security-reports':
+                      print(a['archive_download_url'])
+                      break
+          except Exception:
+              pass
           ")
 
               if [ -n "$ARTIFACT_URL" ]; then
                   echo "Downloading security reports..."
                   curl -s -L -H "Authorization: token ${{ secrets.GH_PAT }}" "$ARTIFACT_URL" -o security-reports.zip
-                  unzip -o security-reports.zip -d security-reports/
-                  ls security-reports/
+                  unzip -o security-reports.zip -d security-reports/ || true
+                  ls security-reports/ || true
               else
                   echo "No security reports found"
                   mkdir -p security-reports
@@ -100,12 +108,18 @@ jobs:
           if [ -f security-reports/bandit-report.json ]; then
             BANDIT=$(python3 -c "
           import json
-          with open('security-reports/bandit-report.json') as f:
-              data = json.load(f)
-          results = data.get('results', [])
-          issues = [f\"{r['issue_severity']} - {r['issue_text']} in {r['filename']}:{r['line_number']}\" for r in results[:10]]
-          print('\n'.join(issues) if issues else 'No issues found')
-          ")
+          try:
+              with open('security-reports/bandit-report.json') as f:
+                  data = json.load(f)
+              if isinstance(data, dict):
+                  results = data.get('results', [])
+                  issues = [f\"{r['issue_severity']} - {r['issue_text']} in {r['filename']}:{r['line_number']}\" for r in results[:10]]
+                  print('\n'.join(issues) if issues else 'No issues found')
+              else:
+                  print('Invalid Bandit report format')
+          except Exception as e:
+              print(f'Could not parse Bandit report: {e}')
+          " 2>/dev/null || echo "Bandit report parse error")
           else
             BANDIT="Bandit report not available"
           fi
@@ -114,14 +128,18 @@ jobs:
           if [ -f security-reports/pip-audit-report.json ]; then
             PIPAUDIT=$(python3 -c "
           import json
-          with open('security-reports/pip-audit-report.json') as f:
-              data = json.load(f)
-          vulns = []
-          for dep in data:
-              for v in dep.get('vulns', []):
-                  vulns.append(f\"{dep['name']} {dep['version']}: {v['id']} - {v['description'][:100]}\")
-          print('\n'.join(vulns[:10]) if vulns else 'No vulnerabilities found')
-          ")
+          try:
+              with open('security-reports/pip-audit-report.json') as f:
+                  data = json.load(f)
+              vulns = []
+              if isinstance(data, list):
+                  for dep in data:
+                      for v in dep.get('vulns', []):
+                          vulns.append(f\"{dep['name']} {dep['version']}: {v['id']} - {v['description'][:100]}\")
+              print('\n'.join(vulns[:10]) if vulns else 'No vulnerabilities found')
+          except Exception as e:
+              print(f'Could not parse pip-audit report: {e}')
+          " 2>/dev/null || echo "pip-audit report parse error")
           else
             PIPAUDIT="pip-audit report not available"
           fi
@@ -130,21 +148,24 @@ jobs:
           if [ -f security-reports/trivy-report.json ]; then
             TRIVY=$(python3 -c "
           import json
-          with open('security-reports/trivy-report.json') as f:
-              data = json.load(f)
-          vulns = []
-          for result in data.get('Results', []):
-              for v in result.get('Vulnerabilities', [])[:5]:
-                  vulns.append(f\"{v.get('Severity','?')} - {v.get('VulnerabilityID','?')}: {v.get('Title','?')[:80]}\")
-          print('\n'.join(vulns[:10]) if vulns else 'No vulnerabilities found')
-          ")
+          try:
+              with open('security-reports/trivy-report.json') as f:
+                  data = json.load(f)
+              vulns = []
+              if isinstance(data, dict):
+                  for result in data.get('Results', []):
+                      for v in result.get('Vulnerabilities', [])[:5]:
+                          vulns.append(f\"{v.get('Severity','?')} - {v.get('VulnerabilityID','?')}: {v.get('Title','?')[:80]}\")
+              print('\n'.join(vulns[:10]) if vulns else 'No vulnerabilities found')
+          except Exception as e:
+              print(f'Could not parse Trivy report: {e}')
+          " 2>/dev/null || echo "Trivy report parse error")
           else
             TRIVY="Trivy report not available"
           fi
 
-          # Check ZAP report
           if [ -f zap-report/report_html.html ]; then
-            ZAP="OWASP ZAP scan completed successfully - dynamic security testing performed on running application"
+            ZAP="OWASP ZAP scan completed - dynamic security testing performed"
           else
             ZAP="ZAP report not available"
           fi
