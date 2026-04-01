@@ -16,6 +16,7 @@ def get_failed_logs():
         "Accept": "application/vnd.github.v3+json"
     }
 
+    print(f"🔍 Fetching jobs for run ID: {RUN_ID}")
     jobs_url = f"https://api.github.com/repos/{REPO}/actions/runs/{RUN_ID}/jobs"
     response = requests.get(jobs_url, headers=headers)
 
@@ -23,13 +24,20 @@ def get_failed_logs():
         return f"❌ Could not fetch jobs: {response.status_code} {response.text}"
 
     jobs = response.json()
+    all_jobs = jobs.get("jobs", [])
+
+    # Print ALL jobs for debugging
+    print(f"📊 Total jobs found: {len(all_jobs)}")
+    for job in all_jobs:
+        print(f"  - {job['name']}: conclusion={job['conclusion']} status={job['status']}")
+
     failed_logs = []
 
-    for job in jobs.get("jobs", []):
-        if job["conclusion"] == "failure":
+    for job in all_jobs:
+        if job["conclusion"] in ["failure", "cancelled"]:
             job_id = job["id"]
             job_name = job["name"]
-            print(f"❌ Found failed job: {job_name} (id: {job_id})")
+            print(f"❌ Found failed job: {job_name} (id: {job_id}, conclusion: {job['conclusion']})")
 
             logs_url = f"https://api.github.com/repos/{REPO}/actions/jobs/{job_id}/logs"
             logs_response = requests.get(
@@ -48,10 +56,17 @@ def get_failed_logs():
                 )
 
     if not failed_logs:
-        all_jobs = [f"{j['name']}: {j['conclusion']}" for j in jobs.get("jobs", [])]
-        return f"No failed jobs found. All jobs: {all_jobs}"
+        # Also try fetching the workflow run itself for more context
+        run_url = f"https://api.github.com/repos/{REPO}/actions/runs/{RUN_ID}"
+        run_response = requests.get(run_url, headers=headers)
+        run_data = run_response.json() if run_response.status_code == 200 else {}
+        
+        all_job_names = [f"{j['name']}: {j['conclusion']}" for j in all_jobs]
+        return f"No failed jobs found.\nWorkflow conclusion: {run_data.get('conclusion')}\nAll jobs: {all_job_names}"
 
     return "\n\n".join(failed_logs)
+
+    
 
 
 def analyze_with_groq(logs):
