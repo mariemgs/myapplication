@@ -41,17 +41,26 @@ jobs:
       - name: Run tests with coverage
         working-directory: backend
         run: |
+          # We use --cov-report=xml to generate the file SonarQube needs
           uv run pytest tests/ \
             --cov=app \
             --cov-report=xml:../coverage.xml \
-            --cov-report=term-missing
-        continue-on-error: true  
+            --cov-report=term
+        continue-on-error: true
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v4
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          # This tells SonarQube where the code is and where the tests are
+          args: >
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.sources=backend/app
+            -Dsonar.tests=backend/tests
+            -Dsonar.projectKey=mariemgs
+
 
      # - name: SonarQube Quality Gate Check
      #   uses: SonarSource/sonarqube-quality-gate-action@master
