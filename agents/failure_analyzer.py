@@ -1,12 +1,20 @@
 import os
+from langchain_groq import ChatGroq
+from langchain_core.messages import HumanMessage, SystemMessage
 import requests
-import json
+
 # Configuration
 GITHUB_TOKEN = os.environ.get("GH_PAT")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 REPO = os.environ.get("GITHUB_REPOSITORY")
 RUN_ID = os.environ.get("GITHUB_RUN_ID")
 PR_NUMBER = os.environ.get("PR_NUMBER")
+
+# LangChain LLM
+llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    temperature=0.3,
+    api_key=os.environ.get("GROQ_API_KEY")
+)
 
 
 def get_failed_logs():
@@ -21,12 +29,11 @@ def get_failed_logs():
     response = requests.get(jobs_url, headers=headers)
 
     if response.status_code != 200:
-        return f"❌ Could not fetch jobs: {response.status_code} {response.text}"
+        return f"❌ Could not fetch jobs: {response.status_code}"
 
     jobs = response.json()
     all_jobs = jobs.get("jobs", [])
 
-    # Print ALL jobs for debugging
     print(f"📊 Total jobs found: {len(all_jobs)}")
     for job in all_jobs:
         print(f"  - {job['name']}: conclusion={job['conclusion']} status={job['status']}")
@@ -37,54 +44,33 @@ def get_failed_logs():
         if job["conclusion"] in ["failure", "cancelled"]:
             job_id = job["id"]
             job_name = job["name"]
-            print(f"❌ Found failed job: {job_name} (id: {job_id}, conclusion: {job['conclusion']})")
+            print(f"❌ Found failed job: {job_name} (id: {job_id})")
 
             logs_url = f"https://api.github.com/repos/{REPO}/actions/jobs/{job_id}/logs"
-            logs_response = requests.get(
-                logs_url,
-                headers=headers,
-                allow_redirects=True
-            )
+            logs_response = requests.get(logs_url, headers=headers, allow_redirects=True)
 
             if logs_response.status_code == 200:
                 log_lines = logs_response.text.split("\n")[-150:]
                 logs = "\n".join(log_lines)
                 failed_logs.append(f"### Job: {job_name}\n```\n{logs}\n```")
             else:
-                failed_logs.append(
-                    f"### Job: {job_name}\nCould not fetch logs: {logs_response.status_code}"
-                )
+                failed_logs.append(f"### Job: {job_name}\nCould not fetch logs: {logs_response.status_code}")
 
     if not failed_logs:
-        # Also try fetching the workflow run itself for more context
         run_url = f"https://api.github.com/repos/{REPO}/actions/runs/{RUN_ID}"
         run_response = requests.get(run_url, headers=headers)
         run_data = run_response.json() if run_response.status_code == 200 else {}
-        
         all_job_names = [f"{j['name']}: {j['conclusion']}" for j in all_jobs]
         return f"No failed jobs found.\nWorkflow conclusion: {run_data.get('conclusion')}\nAll jobs: {all_job_names}"
 
     return "\n\n".join(failed_logs)
 
-    
 
-
-def analyze_with_groq(logs):
-    """Send logs to Groq for analysis"""
-
-    if not GROQ_API_KEY:
-        return "❌ Missing GROQ_API_KEY"
-
-    url = "https://api.groq.com/openai/v1/chat/completions"
-
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    prompt = f"""You are a DevOps expert analyzing a CI/CD pipeline failure.
-
-Analyze these GitHub Actions failure logs and provide:
+def analyze_with_langchain(logs):
+    """Send logs to Groq via LangChain for analysis"""
+    messages = [
+        SystemMessage(content="You are a DevOps and DevSecOps expert."),
+        HumanMessage(content=f"""Analyze these GitHub Actions failure logs and provide:
 
 1. What failed
 2. Why it failed (root cause)
@@ -94,38 +80,18 @@ Be concise, technical, and developer-friendly.
 
 Logs:
 {logs[:8000]}
-"""
-
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": "You are a DevOps and DevSecOps expert."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.3
-    }
+""")
+    ]
 
     try:
-        response = requests.post(url, headers=headers, json=payload)
-
-        if response.status_code != 200:
-            return f"❌ Groq API error: {response.status_code} {response.text}"
-
-        data = response.json()
-
-        # Safe parsing
-        if "choices" in data and len(data["choices"]) > 0:
-            return data["choices"][0]["message"]["content"]
-        else:
-            return f"⚠️ Unexpected Groq response format: {data}"
-
+        response = llm.invoke(messages)
+        return response.content
     except Exception as e:
-        return f"⚠️ Exception during Groq call: {str(e)}"
+        return f"⚠️ LangChain/Groq error: {str(e)}"
 
 
 def post_github_comment(analysis):
     """Post analysis as GitHub comment"""
-
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
@@ -136,7 +102,7 @@ def post_github_comment(analysis):
 {analysis}
 
 ---
-*Powered by Groq (Llama3) • Agentic DevSecOps System*
+*Powered by LangChain + Groq (Llama3) • Agentic DevSecOps System*
 """
 
     if PR_NUMBER and PR_NUMBER not in ["", "None"]:
@@ -161,13 +127,11 @@ def main():
 
     print("📋 Fetching failed job logs...")
     logs = get_failed_logs()
-
     print(f"📝 Got {len(logs)} characters of logs")
     print(f"Preview: {logs[:200]}")
 
-    print("🧠 Analyzing with Groq AI...")
-    analysis = analyze_with_groq(logs)
-
+    print("🧠 Analyzing with LangChain + Groq...")
+    analysis = analyze_with_langchain(logs)
     print("✅ Analysis complete!")
     print("\n--- Analysis ---")
     print(analysis)

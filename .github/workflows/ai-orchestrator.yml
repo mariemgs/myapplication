@@ -1,0 +1,97 @@
+name: AI Orchestrator
+
+on:
+  workflow_run:
+    workflows:
+      - "OWASP ZAP DAST Scan"
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  orchestrate:
+    name: Run AI Orchestrator
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install langgraph langchain langchain-groq langchain-core requests
+
+      - name: Download ZAP report
+        run: |
+          ARTIFACTS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/artifacts"
+          curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $ARTIFACTS_URL > zap-artifacts.json
+          ZAP_URL=$(python3 -c "
+          import json
+          try:
+              with open('zap-artifacts.json') as f:
+                  data = json.load(f)
+              for a in data.get('artifacts', []):
+                  if a['name'] == 'zap-report':
+                      print(a['archive_download_url'])
+                      break
+          except: pass
+          ")
+          if [ -n "$ZAP_URL" ]; then
+              curl -s -L -H "Authorization: token ${{ secrets.GH_PAT }}" "$ZAP_URL" -o zap-report.zip
+              unzip -o zap-report.zip -d zap-report/ || true
+          else
+              mkdir -p zap-report
+          fi
+
+      - name: Download security reports
+        run: |
+          RUNS_URL="https://api.github.com/repos/${{ github.repository }}/actions/workflows/test-backend.yml/runs?head_sha=${{ github.event.workflow_run.head_sha }}&per_page=1"
+          curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $RUNS_URL > backend-runs.json
+          RUN_ID=$(python3 -c "
+          import json
+          try:
+              with open('backend-runs.json') as f:
+                  data = json.load(f)
+              runs = data.get('workflow_runs', [])
+              if runs: print(runs[0]['id'])
+          except: pass
+          ")
+          if [ -n "$RUN_ID" ]; then
+              ARTIFACTS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts"
+              curl -s -H "Authorization: token ${{ secrets.GH_PAT }}" $ARTIFACTS_URL > backend-artifacts.json
+              ARTIFACT_URL=$(python3 -c "
+          import json
+          try:
+              with open('backend-artifacts.json') as f:
+                  data = json.load(f)
+              for a in data.get('artifacts', []):
+                  if a['name'] == 'security-reports':
+                      print(a['archive_download_url'])
+                      break
+          except: pass
+          ")
+              if [ -n "$ARTIFACT_URL" ]; then
+                  curl -s -L -H "Authorization: token ${{ secrets.GH_PAT }}" "$ARTIFACT_URL" -o security-reports.zip
+                  unzip -o security-reports.zip -d security-reports/ || true
+              else
+                  mkdir -p security-reports
+              fi
+          else
+              mkdir -p security-reports
+          fi
+
+      - name: Run AI Orchestrator
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.event.workflow_run.id }}
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+          PROMETHEUS_URL: "http://192.168.29.131:9090"
+        run: python -m agents.orchestrator
