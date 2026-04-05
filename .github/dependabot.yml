@@ -1,57 +1,61 @@
 version: 2
 updates:
-  # GitHub Actions - Grouped to keep your PR list clean
+  # 1. GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly" # Daily is usually too much for Actions
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 1
     groups:
-      actions:
-        patterns:
-          - "*"
+      actions-all:
+        patterns: ["*"]
     commit-message:
       prefix: "⬆"
     labels: ["dependencies", "internal"]
 
-  # Python uv - Pointed to your actual backend folder
+  # 2. Python (Backend)
   - package-ecosystem: "uv"
-    directory: "/backend" # Adjusted to match your project structure
+    directory: "/backend"
     schedule:
       interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 1
     groups:
-      python-deps:
-        patterns:
-          - "*"
+      python-all:
+        patterns: ["*"]
     commit-message:
       prefix: "⬆"
     labels: ["dependencies", "internal"]
 
-  # Bun / Frontend
+  # 3. Bun (Frontend)
   - package-ecosystem: "bun"
-    directory: "/frontend" # Adjusted to match your project structure
+    directory: "/frontend"
     schedule:
       interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 1
     ignore:
       - dependency-name: "@hey-api/openapi-ts"
     groups:
-      frontend-deps:
-        patterns:
-          - "*"
+      frontend-all:
+        patterns: ["*"]
     commit-message:
       prefix: "⬆"
     labels: ["dependencies", "internal"]
 
-  # Docker & Docker Compose
+  # 4. Docker
   - package-ecosystem: "docker"
     directories:
       - "/backend"
       - "/frontend"
     schedule:
       interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 1
     groups:
-      docker-images:
-        patterns:
-          - "*"
+      docker-all:
+        patterns: ["*"]
     commit-message:
       prefix: "⬆"
     labels: ["dependencies", "internal"]
@@ -60,6 +64,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 1
     commit-message:
       prefix: "⬆"
     labels: ["dependencies", "internal"]

@@ -2,13 +2,13 @@ name: AI Monitoring Agent
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Every 30 minutes
-  workflow_dispatch:          # Manual trigger
+    - cron: '0 9 * * *'  # Once a day at 9am 
+  workflow_dispatch: 
 
 jobs:
   monitor:
     name: Monitor App Health
-    runs-on: self-hosted      # Needs access to your VM's Prometheus
+    runs-on: self-hosted
 
     steps:
       - name: Checkout code
@@ -20,12 +20,15 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests langchain-groq langchain-core
 
       - name: Run AI Monitoring Agent
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          PROMETHEUS_URL: "http://192.168.29.131:9090"
+          # Localhost usually works better for self-hosted runners on the same machine
+          PROMETHEUS_URL: "http://localhost:9090" 
         run: python agents/monitoring_agent.py
