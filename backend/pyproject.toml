@@ -8,9 +8,9 @@ dependencies = [
     "python-multipart>=0.0.22",
     "starlette>=0.49.1",
     "email-validator<3.0.0.0,>=2.1.0.post1",
-    "tenacity<9.0.0,>=8.2.3",
+    "tenacity>=8.2.3,<10.0.0",
     "pydantic>2.0",
-    "emails<1.0,>=0.6",
+    "emails>=0.6,<2.0",
     "jinja2<4.0.0,>=3.1.4",
     "alembic<2.0.0,>=1.12.1",
     "httpx<1.0.0,>=0.25.1",
@@ -20,12 +20,12 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.0.0,<3.0.0",
     "pyjwt>=2.12.0",
     "pwdlib[argon2,bcrypt]>=0.3.0",
-    "prometheus-fastapi-instrumentator>=6.0.0,<7.0.0",
+    "prometheus-fastapi-instrumentator>=6.0.0,<8.0.0",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest<8.0.0,>=7.4.3",
+    "pytest>=7.4.3,<10.0.0",
     "pytest-cov>=4.1.0",
     "mypy<2.0.0,>=1.8.0",
     "ruff<1.0.0,>=0.2.2",
