@@ -160,38 +160,24 @@ Format in markdown.""")
 
 # ─── Node 4: Monitoring Agent ─────────────────────────────────────
 def monitoring_agent_node(state: AgentState) -> AgentState:
-    print("📊 Node 4: Analyzing monitoring metrics...")
+    print("📊 Node 4: Monitoring analysis...")
     
-    llm = get_llm()
-    metrics = state.get("prometheus_metrics", "No metrics available")
-    
-    messages = [
-        SystemMessage(content="You are a DevOps monitoring expert. Be concise."),
-        HumanMessage(content=f"""Analyze these application metrics from Prometheus:
+    # Monitoring agent runs separately on self-hosted runner
+    # with direct Prometheus access every 30 minutes
+    analysis = """## 📊 Monitoring Status
 
-{metrics}
+> ℹ️ Real-time monitoring is handled by the dedicated AI Monitoring Agent 
+> running on the self-hosted runner with direct Prometheus access.
+> 
+> Check the **Issues tab** for any active monitoring alerts.
+> Prometheus dashboard: http://192.168.29.131:9090
+> Grafana dashboard: http://192.168.29.131:3000"""
 
-Provide:
-1. Health Status (Healthy/Degraded/Critical)
-2. Any anomalies detected
-3. Immediate actions if needed
-
-Format in markdown. Be concise.""")
-    ]
-    
-    response = llm.invoke(messages)
-    analysis = response.content
-    
-    has_monitoring_issues = any(keyword in analysis.lower() 
-                                 for keyword in ["critical", "degraded", "anomaly", "high error"])
-    
-    print(f"  ✅ Monitoring analysis complete ({len(analysis)} chars)")
     return {
         "monitoring_analysis": analysis,
-        "has_monitoring_issues": has_monitoring_issues
+        "has_monitoring_issues": False
     }
-
-
+    
 # ─── Node 5: Critic Agent ─────────────────────────────────────────
 def critic_node(state: AgentState) -> AgentState:
     print("🧐 Node 5: Critic validating all analyses...")
