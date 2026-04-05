@@ -31,7 +31,7 @@ jobs:
           sudo chown -R $USER:$USER ${{ github.workspace }} || true
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Create Traefik network
         run: docker network create traefik-public || true

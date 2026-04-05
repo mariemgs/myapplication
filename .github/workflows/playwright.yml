@@ -19,8 +19,8 @@ jobs:
     outputs:
       changed: ${{ steps.filter.outputs.changed }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: dorny/paths-filter@v3
+    - uses: actions/checkout@v6
+    - uses: dorny/paths-filter@v4
       id: filter
       with:
         filters: |
@@ -51,9 +51,9 @@ jobs:
         mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
         chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
         chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - uses: oven-sh/setup-bun@v2
-    - uses: actions/setup-python@v4
+    - uses: actions/setup-python@v6
       with:
         python-version: '3.10'
     - name: Setup tmate session
@@ -62,7 +62,7 @@ jobs:
       with:
         limit-access-to-actor: true
     - name: Install uv
-      uses: astral-sh/setup-uv@v4
+      uses: astral-sh/setup-uv@v7
     - run: uv sync
       working-directory: backend
     - run: bun ci
@@ -85,7 +85,7 @@ jobs:
         chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
     - name: Upload blob report to GitHub Actions Artifacts
       if: ${{ !cancelled() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: blob-report-${{ matrix.shardIndex }}
         path: frontend/blob-report
@@ -120,12 +120,12 @@ jobs:
         mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
         chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
         chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - uses: oven-sh/setup-bun@v2
     - name: Install dependencies
       run: bun ci
     - name: Download blob reports from GitHub Actions Artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         path: frontend/all-blob-reports
         pattern: blob-report-*
@@ -134,7 +134,7 @@ jobs:
       run: bunx playwright merge-reports --reporter html ./all-blob-reports
       working-directory: frontend
     - name: Upload HTML report
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: html-report--attempt-${{ github.run_attempt }}
         path: frontend/playwright-report
@@ -147,7 +147,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.10'
       - name: Decide whether the needed jobs succeeded or failed
