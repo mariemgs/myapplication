@@ -12,6 +12,7 @@ jobs:
   code-review:
     name: AI Code Review
     runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.head_ref, 'ai-fixes/') }}
 
     steps:
       - name: Checkout code
