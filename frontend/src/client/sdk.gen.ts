@@ -466,3 +466,13 @@ export class UtilsService {
         });
     }
 }
+
+export class AgentsService {
+    public static getAgentStatus() {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/agents/status',
+           
+        });
+    }
+}
