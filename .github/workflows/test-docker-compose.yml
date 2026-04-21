@@ -16,6 +16,8 @@ jobs:
     env:
       DOCKER_IMAGE_BACKEND: ci-backend
       DOCKER_IMAGE_FRONTEND: ci-frontend
+      FRONTEND_HOST: ${{ secrets.FRONTEND_HOST }}
+      DOMAIN: ${{ secrets.DOMAIN }}
       TAG: latest
     steps:
       - name: Checkout
