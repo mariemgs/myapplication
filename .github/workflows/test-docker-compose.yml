@@ -22,6 +22,41 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Create .env file
+        run: |
+          cat << EOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS=${{ secrets.SMTP_TLS }}
+          SMTP_SSL=${{ secrets.SMTP_SSL }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          EMAIL=${{ secrets.EMAIL }}
+          POSTGRES_SERVER=${{ secrets.POSTGRES_SERVER }}
+          POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}
+          DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKER_IMAGE_FRONTEND }}
+          GH_PAT=${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
+          PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
+          EOF
+
+
+
       - run: docker compose build
       - name: Scan backend image (Trivy)
         uses: aquasecurity/trivy-action@master
