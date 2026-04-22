@@ -1,5 +1,4 @@
 name: Test Backend
-
 on:
   push:
     branches:
@@ -8,29 +7,45 @@ on:
     types:
       - opened
       - synchronize
-
 jobs:
   test-backend:
     runs-on: ubuntu-latest
-    env:
-      DOMAIN: ${{ secrets.DOMAIN }}
-      STACK_NAME: my-app
-      SECRET_KEY: ${{ secrets.SECRET_KEY }}
-      FIRST_SUPERUSER: ${{ secrets.FIRST_SUPERUSER }}
-      FIRST_SUPERUSER_PASSWORD: ${{ secrets.FIRST_SUPERUSER_PASSWORD }}
-      POSTGRES_SERVER: ${{ secrets.DOCKER_IMAGE_FRONTEND }}
-      POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
-      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-      DOCKER_IMAGE_BACKEND: ${{ secrets.DOCKER_IMAGE_BACKEND }}
-      DOCKER_IMAGE_FRONTEND: ${{ secrets.DOCKER_IMAGE_FRONTEND }}
-      FRONTEND_HOST: ${{ secrets.FRONTEND_HOST }}
-
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          cat << EOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS=${{ secrets.SMTP_TLS }}
+          SMTP_SSL=${{ secrets.SMTP_SSL }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          EMAIL=${{ secrets.EMAIL }}
+          POSTGRES_SERVER=${{ secrets.POSTGRES_SERVER }}
+          POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}
+          DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKER_IMAGE_FRONTEND }}
+          GH_PAT=${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
+          PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
+          EOF
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -40,28 +55,22 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      # 1. Start Services
-      # Ensure --build is used to include the 'tests' folder from your Dockerfile
       - name: Pre-test cleanup
         run: |
           sudo rm -rf ./backend/htmlcov || true
           sudo chown -R $USER:$USER . || true
-      - name: Checkout
-        uses: actions/checkout@v4
+
       - name: Start Services
         run: |
           docker compose down -v --remove-orphans
           docker compose up -d db mailcatcher backend --build
 
-      # 2. Run Database Migrations
       - name: Migrate DB
         run: docker compose exec -T backend bash scripts/prestart.sh
 
-      # 3. Run Tests
       - name: Run tests
         run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
-        
-      # 4. Extract Coverage (Fixed Permissions & Path)
+
       - name: Copy coverage from container
         if: always()
         run: |
@@ -70,18 +79,15 @@ jobs:
           docker cp $(docker compose ps -q backend):/app/backend/htmlcov/. ./backend/htmlcov
           sudo chown -R $USER:$USER ./backend/htmlcov
 
-      # 5. Security Scans
       - name: Run SAST (Bandit)
         run: |
           pip install bandit
-          # Scanning the local backend directory on the runner host
           bandit -r backend -ll -f json -o bandit-report.json || true
           bandit -r backend -ll || true
 
       - name: Dependency vulnerability scan (pip-audit)
         run: |
           pip install pip-audit
-          # Pointing to the requirements/dependencies in the backend folder
           pip-audit -f json -o pip-audit-report.json || true
 
       - name: Secrets scan (Gitleaks)
@@ -89,7 +95,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 6. Artifact Uploads
       - name: Upload security reports
         uses: actions/upload-artifact@v4
         if: always()
@@ -107,7 +112,6 @@ jobs:
           name: coverage-html
           path: backend/htmlcov
 
-      # 7. Final Coverage Check & Cleanup
       - name: Coverage report check
         run: docker compose exec -T backend uv run coverage report --fail-under=90
 
