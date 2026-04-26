@@ -1,0 +1,11 @@
+[run]
+omit =
+    */tests/*
+    */initial_data.py
+    */api/routes/agents.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if TYPE_CHECKING:

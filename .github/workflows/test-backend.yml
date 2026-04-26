@@ -113,7 +113,7 @@ jobs:
           path: backend/htmlcov
 
       - name: Coverage report check
-        run: docker compose exec -T backend uv run coverage report --fail-under=90
+        run: docker compose exec -T backend uv run coverage report --fail-under=90 --rcfile=.coveragerc
 
       - name: Stop Services
         if: always()
