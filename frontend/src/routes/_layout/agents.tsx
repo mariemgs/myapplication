@@ -162,6 +162,7 @@ function AgentsTab() {
                       </a>
                     )}
                     <button
+                      type="button"
                       onClick={() => trigger.mutate(agent.id ?? agent.name.toLowerCase().replace(' ', '-'))}
                       disabled={trigger.isPending}
                       className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
@@ -415,6 +416,7 @@ function RouteComponent() {
       <div className="flex gap-1 border-b">
         {TABS.map((tab) => (
           <button
+            type="button"
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
