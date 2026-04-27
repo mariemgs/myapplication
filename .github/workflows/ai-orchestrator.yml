@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install langgraph langchain langchain-groq langchain-core requests --break-system-packages
+          pip3 install langgraph langchain langchain-groq langchain-core requests
 
       - name: Download ZAP report
         run: |
