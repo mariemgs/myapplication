@@ -160,22 +160,107 @@ Format in markdown.""")
 
 # ─── Node 4: Monitoring Agent ─────────────────────────────────────
 def monitoring_agent_node(state: AgentState) -> AgentState:
-    print("📊 Node 4: Monitoring analysis...")
-    
-    # Monitoring agent runs separately on self-hosted runner
-    # with direct Prometheus access every 30 minutes
-    analysis = """## 📊 Monitoring Status
+    print("📊 Node 4: Monitoring analysis with real Prometheus data...")
 
-> ℹ️ Real-time monitoring is handled by the dedicated AI Monitoring Agent 
-> running on the self-hosted runner with direct Prometheus access.
-> 
-> Check the **Issues tab** for any active monitoring alerts.
-> Prometheus dashboard: http://192.168.29.131:9090
-> Grafana dashboard: http://192.168.29.131:3000"""
+    PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://192.168.29.131:9090")
+    GITHUB_TOKEN = os.environ.get("GH_PAT")
+    REPO = os.environ.get("GITHUB_REPOSITORY")
 
+    ERROR_RATE_THRESHOLD = 0.05
+    RESPONSE_TIME_THRESHOLD = 2.0
+
+    def query_prometheus_local(query):
+        try:
+            url = f"{PROMETHEUS_URL}/api/v1/query"
+            response = requests.get(url, params={"query": query}, timeout=5)
+            if response.status_code == 200:
+                results = response.json().get("data", {}).get("result", [])
+                if results:
+                    return float(results[0]["value"][1])
+        except Exception as e:
+            print(f"  ⚠️ Prometheus query failed: {e}")
+        return None
+
+    # Collect metrics
+    error_rate = query_prometheus_local(
+        'sum(rate(http_requests_total{status=~"4..|5.."}[5m])) / sum(rate(http_requests_total[5m]))'
+    )
+    response_time = query_prometheus_local(
+        'sum(rate(http_request_duration_seconds_sum[5m])) / sum(rate(http_request_duration_seconds_count[5m]))'
+    )
+    request_rate = query_prometheus_local('sum(rate(http_requests_total[5m])) * 60')
+    total_requests = query_prometheus_local('sum(http_requests_total)')
+
+    print(f"  Error Rate: {error_rate}")
+    print(f"  Response Time: {response_time}")
+    print(f"  Request Rate: {request_rate}")
+
+    has_monitoring_issues = False
+
+    if error_rate is not None or response_time is not None:
+        # Real Prometheus data available
+        print("  ✅ Real Prometheus data available!")
+
+        anomalies = []
+        if error_rate and error_rate > ERROR_RATE_THRESHOLD:
+            anomalies.append(f"High error rate: {error_rate*100:.2f}% (threshold: {ERROR_RATE_THRESHOLD*100}%)")
+            has_monitoring_issues = True
+        if response_time and response_time > RESPONSE_TIME_THRESHOLD:
+            anomalies.append(f"Slow response time: {response_time:.3f}s (threshold: {RESPONSE_TIME_THRESHOLD}s)")
+            has_monitoring_issues = True
+
+        anomaly_text = "\n".join([f"- {a}" for a in anomalies]) if anomalies else "No anomalies detected"
+
+        llm = get_llm()
+        messages = [
+            SystemMessage(content="You are a DevOps monitoring expert."),
+            HumanMessage(content=f"""Analyze these real application metrics from Prometheus:
+
+- Error Rate: {error_rate if error_rate is not None else 'N/A'}
+- Response Time: {response_time if response_time is not None else 'N/A'}s
+- Request Rate: {request_rate if request_rate is not None else 'N/A'} req/min
+- Total Requests: {total_requests if total_requests is not None else 'N/A'}
+
+Detected Anomalies:
+{anomaly_text}
+
+Provide:
+1. **Health Status** - Healthy/Degraded/Critical
+2. **Root Cause Analysis** if anomalies exist
+3. **Immediate Actions** if needed
+4. **Summary** in 1-2 sentences
+
+Be concise and actionable. Use markdown.""")
+        ]
+
+        analysis = llm.invoke(messages).content
+
+    else:
+        # Prometheus unreachable — check GitHub issues
+        print("  ⚠️ Prometheus unreachable — checking GitHub monitoring issues...")
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        url = f"https://api.github.com/repos/{REPO}/issues?state=open&labels=monitoring&per_page=5"
+        resp = requests.get(url, headers=headers)
+        issues = resp.json() if resp.status_code == 200 else []
+        has_monitoring_issues = len(issues) > 0
+
+        if issues:
+            analysis = f"## 📊 Monitoring Status\n\n⚠️ **{len(issues)} active monitoring alert(s):**\n\n"
+            for issue in issues:
+                analysis += f"- [{issue['title']}]({issue['html_url']})\n"
+        else:
+            analysis = "## 📊 Monitoring Status\n\n✅ **App is healthy** — No active monitoring alerts.\n"
+
+        analysis += f"\n> ⚠️ Prometheus at {PROMETHEUS_URL} was unreachable at analysis time.\n"
+        analysis += f"> Grafana: http://192.168.29.131:3000"
+
+    print(f"  ✅ Monitoring analysis complete ({len(analysis)} chars)")
     return {
         "monitoring_analysis": analysis,
-        "has_monitoring_issues": False
+        "has_monitoring_issues": has_monitoring_issues
     }
     
 # ─── Node 5: Critic Agent ─────────────────────────────────────────
