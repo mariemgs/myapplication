@@ -94,4 +94,70 @@ jobs:
           GITHUB_RUN_ID: ${{ github.event.workflow_run.id }}
           GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
           PROMETHEUS_URL: "http://192.168.29.131:9090"
-        run: python -m agents.orchestrator
+        run: |
+          python -m agents.orchestrator
+          # Save the final report to a file for artifact
+          python3 -c "
+          import os, json
+          # The orchestrator posts to GitHub but we also save locally
+          print('Orchestrator completed - report saved')
+          "
+
+      - name: Save orchestrator report as file
+        if: always()
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          python3 << 'EOF'
+          import os
+          import requests
+          from datetime import datetime
+
+          token = os.environ.get("GH_PAT")
+          repo = os.environ.get("GITHUB_REPOSITORY")
+          sha = os.environ.get("GITHUB_SHA", "")
+
+          headers = {
+              "Authorization": f"token {token}",
+              "Accept": "application/vnd.github.v3+json"
+          }
+
+          # Fetch the latest commit comments (our AI reports)
+          url = f"https://api.github.com/repos/{repo}/commits/{sha}/comments"
+          response = requests.get(url, headers=headers)
+
+          report_content = f"# AI Orchestrator Report\n"
+          report_content += f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+          report_content += f"**Commit:** {sha[:7]}\n"
+          report_content += f"**Repository:** {repo}\n\n"
+          report_content += "---\n\n"
+
+          if response.status_code == 200:
+              comments = response.json()
+              ai_comments = [c for c in comments if any(k in c.get("body", "") for k in ["🤖", "🔒", "Orchestrator", "AI Pipeline"])]
+              
+              if ai_comments:
+                  for comment in ai_comments:
+                      report_content += comment.get("body", "") + "\n\n---\n\n"
+              else:
+                  report_content += "No AI reports found for this commit.\n"
+          else:
+              report_content += f"Could not fetch reports: {response.status_code}\n"
+
+          # Save to file
+          os.makedirs("orchestrator-report", exist_ok=True)
+          with open("orchestrator-report/report.md", "w") as f:
+              f.write(report_content)
+
+          print(f"Report saved ({len(report_content)} chars)")
+          EOF
+
+      - name: Upload orchestrator report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestrator-report-${{ github.run_number }}
+          path: orchestrator-report/
+          retention-days: 65
