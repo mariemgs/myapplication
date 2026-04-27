@@ -95,7 +95,7 @@ export const columns: ColumnDef<any>[] = [
           </a>
         )}
         {/* Placeholder for your trigger/retry logic */}
-        <button className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+        <button type="button" className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
           Retry
         </button>
       </div>
