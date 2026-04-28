@@ -169,15 +169,35 @@ def monitoring_agent_node(state: AgentState) -> AgentState:
     # Use exact same logic as standalone monitoring agent
     metrics = collect_metrics()
     anomalies = detect_anomalies(metrics)
-    
+
+    # Always build metrics table
+    error_rate = metrics.get('error_rate')
+    response_time = metrics.get('response_time')
+    request_rate = metrics.get('request_rate')
+    total_requests = metrics.get('total_requests')
+
+    metrics_table = f"""## 📊 Current Metrics
+
+| Metric | Value | Threshold | Status |
+|--------|-------|-----------|--------|
+| Error Rate | {f"{error_rate*100:.2f}%" if error_rate is not None else "N/A"} | 5% | {"🔴" if error_rate and error_rate > 0.05 else "✅"} |
+| Response Time | {f"{response_time:.3f}s" if response_time is not None else "N/A"} | 2s | {"🔴" if response_time and response_time > 2.0 else "✅"} |
+| Request Rate | {f"{request_rate:.2f} req/min" if request_rate is not None else "N/A"} | - | ℹ️ |
+| Total Requests | {int(total_requests) if total_requests is not None else "N/A"} | - | ℹ️ |
+
+> 📡 Prometheus: http://192.168.29.131:9090 | Grafana: http://192.168.29.131:3000
+"""
+
     if anomalies:
         print(f"  ⚠️ Found {len(anomalies)} anomaly(ies)!")
-        analysis = analyze_with_langchain(metrics, anomalies)
+        ai_analysis = analyze_with_langchain(metrics, anomalies)
+        analysis = f"{metrics_table}\n## 🤖 AI Analysis\n{ai_analysis}"
         has_monitoring_issues = True
     else:
         print("  ✅ All metrics within normal thresholds!")
-        analysis = "## 📊 Monitoring Status\n\n✅ **App is healthy** — No anomalies detected.\n"
-        
+        analysis = f"## 📊 Monitoring Status\n\n✅ **App is healthy** — No anomalies detected.\n\n{metrics_table}"
+        has_monitoring_issues = False
+
         # Check GitHub issues as backup
         import requests as req
         token = os.environ.get("GH_PAT")
@@ -185,7 +205,7 @@ def monitoring_agent_node(state: AgentState) -> AgentState:
         headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
         resp = req.get(f"https://api.github.com/repos/{repo}/issues?state=open&labels=monitoring&per_page=3", headers=headers)
         issues = resp.json() if resp.status_code == 200 else []
-        
+
         if issues:
             analysis += f"\n⚠️ **{len(issues)} open monitoring issue(s) on GitHub:**\n"
             for issue in issues:
