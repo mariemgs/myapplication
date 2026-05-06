@@ -16,23 +16,59 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Create .env file
+        run: |
+          cat << EOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          POSTGRES_SERVER=db
+          POSTGRES_PORT=5432
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          EOF
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
-      - name: Install dependencies
-        run: uv sync
-        working-directory: backend
+      - name: Start services
+        run: docker compose up -d db mailcatcher backend --build
+
+      - name: Wait for backend
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/api/v1/utils/health-check/ | grep -q "true"; then
+              echo "Backend ready!"
+              break
+            fi
+            sleep 5
+          done
 
       - name: Run tests with coverage
-        working-directory: backend
         run: |
-          uv run pytest tests/ \
+          docker compose exec -T backend uv run pytest tests/ \
             --cov=app \
-            --cov-report=xml:../coverage.xml \
+            --cov-report=xml:/coverage.xml \
             --cov-report=term \
-            --ignore=tests/api \
-            -x
+            --omit="*/agents.py,*/initial_data.py,*/main.py"
         continue-on-error: true
+
+      - name: Copy coverage report
+        run: |
+          docker cp $(docker compose ps -q backend):/coverage.xml coverage.xml || true
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v --remove-orphans
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v4
@@ -46,4 +82,3 @@ jobs:
             -Dsonar.tests=backend/tests
             -Dsonar.projectKey=mariemgs_myapplication
             -Dsonar.coverage.exclusions=**/agents.py,**/main.py,**/initial_data.py,**/backend_pre_start.py,**/tests_pre_start.py
-            -Dsonar.qualitygate.wait=false
