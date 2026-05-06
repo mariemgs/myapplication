@@ -68,14 +68,18 @@ jobs:
         run: |
           docker compose exec -T backend uv run pytest tests/ \
             --cov=app \
-            --cov-report=xml:/coverage.xml \
+            --cov-report=xml:coverage.xml \
             --cov-report=term \
             --omit="*/agents.py,*/initial_data.py,*/main.py"
         continue-on-error: true
 
       - name: Copy coverage report
         run: |
-          docker cp $(docker compose ps -q backend):/coverage.xml coverage.xml || true
+          BACKEND_CONTAINER=$(docker compose ps -q backend)
+          docker cp $BACKEND_CONTAINER:/app/backend/coverage.xml coverage.xml || \
+          docker cp $BACKEND_CONTAINER:/app/coverage.xml coverage.xml || \
+          echo "coverage.xml not found in container"
+          ls -la coverage.xml || echo "coverage.xml not on host either"
 
       - name: Stop services
         if: always()
