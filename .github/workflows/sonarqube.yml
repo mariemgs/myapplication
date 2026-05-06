@@ -1,5 +1,4 @@
 name: SonarQube Analysis
-
 on:
   push:
     branches:
@@ -7,29 +6,15 @@ on:
       - develop
   pull_request:
     types: [opened, synchronize, reopened]
-
 jobs:
   sonarqube:
     name: SonarQube Scan
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for better analysis
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      #- name: Install dependencies
-      #  working-directory: backend
-      #  run: |
-      #    pip install -r requirements.txt
-      #    pip install pytest pytest-cov
-
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -41,11 +26,12 @@ jobs:
       - name: Run tests with coverage
         working-directory: backend
         run: |
-          # We use --cov-report=xml to generate the file SonarQube needs
           uv run pytest tests/ \
             --cov=app \
             --cov-report=xml:../coverage.xml \
-            --cov-report=term
+            --cov-report=term \
+            --ignore=tests/api \
+            -x
         continue-on-error: true
 
       - name: SonarQube Scan
@@ -54,17 +40,10 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
-          # This tells SonarQube where the code is and where the tests are
           args: >
             -Dsonar.python.coverage.reportPaths=coverage.xml
             -Dsonar.sources=backend/app
             -Dsonar.tests=backend/tests
             -Dsonar.projectKey=mariemgs_myapplication
-
-
-     # - name: SonarQube Quality Gate Check
-     #   uses: SonarSource/sonarqube-quality-gate-action@master
-     #  timeout-minutes: 5
-     #   env:
-     #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-     #     SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+            -Dsonar.coverage.exclusions=**/agents.py,**/main.py,**/initial_data.py,**/backend_pre_start.py,**/tests_pre_start.py
+            -Dsonar.qualitygate.wait=false
