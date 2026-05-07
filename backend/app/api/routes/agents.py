@@ -92,6 +92,9 @@ def get_agents_status(current_user: CurrentUser) -> Any:
                         last_run = runs[0]
                         created_at = last_run.get("created_at")
                         agents.append({
+                            "id": agent["id"],
+                            "id": agent["id"],
+                            "id": agent["id"],
                             "name": agent["name"],
                             "icon": agent["icon"],
                             "description": agent["description"],
@@ -104,6 +107,9 @@ def get_agents_status(current_user: CurrentUser) -> Any:
                         })
                     else:
                         agents.append({
+                            "id": agent["id"],
+                            "id": agent["id"],
+                            "id": agent["id"],
                             "name": agent["name"],
                             "icon": agent["icon"],
                             "description": agent["description"],
@@ -116,7 +122,10 @@ def get_agents_status(current_user: CurrentUser) -> Any:
                         })
                 else:
                     agents.append({
-                        "name": agent["name"],
+                        "id": agent["id"],
+                            "id": agent["id"],
+                            "id": agent["id"],
+                            "name": agent["name"],
                         "icon": agent["icon"],
                         "description": agent["description"],
                         "workflow_file": agent["file"],
@@ -128,7 +137,10 @@ def get_agents_status(current_user: CurrentUser) -> Any:
                     })
             except Exception:
                 agents.append({
-                    "name": agent["name"],
+                    "id": agent["id"],
+                            "id": agent["id"],
+                            "id": agent["id"],
+                            "name": agent["name"],
                     "icon": agent["icon"],
                     "description": agent["description"],
                     "workflow_file": agent["file"],
