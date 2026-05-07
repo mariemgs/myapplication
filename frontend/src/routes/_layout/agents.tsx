@@ -88,7 +88,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 // ── Agents Tab ─────────────────────────────────────────────────────
 function AgentsTab() {
   const { data: agents } = useSuspenseQuery({
-    queryFn: () => AgentsService.getAgentsStatus() as Promise<any[]>,
+    queryFn: () => AgentsService.getAgentStatus() as Promise<any[]>,
     queryKey: ['agents'],
     refetchInterval: 30000,
   })
