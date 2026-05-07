@@ -94,7 +94,6 @@ def get_agents_status(current_user: CurrentUser) -> Any:
                         agents.append({
                             "id": agent["id"],
                             "id": agent["id"],
-                            "id": agent["id"],
                             "name": agent["name"],
                             "icon": agent["icon"],
                             "description": agent["description"],
@@ -107,7 +106,6 @@ def get_agents_status(current_user: CurrentUser) -> Any:
                         })
                     else:
                         agents.append({
-                            "id": agent["id"],
                             "id": agent["id"],
                             "id": agent["id"],
                             "name": agent["name"],
@@ -124,7 +122,6 @@ def get_agents_status(current_user: CurrentUser) -> Any:
                     agents.append({
                         "id": agent["id"],
                             "id": agent["id"],
-                            "id": agent["id"],
                             "name": agent["name"],
                         "icon": agent["icon"],
                         "description": agent["description"],
@@ -138,7 +135,6 @@ def get_agents_status(current_user: CurrentUser) -> Any:
             except Exception:
                 agents.append({
                     "id": agent["id"],
-                            "id": agent["id"],
                             "id": agent["id"],
                             "name": agent["name"],
                     "icon": agent["icon"],
