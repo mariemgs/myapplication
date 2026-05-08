@@ -1,4 +1,4 @@
-import { AgentsService } from '@/client'
+import { AgentsService } from '@/client/agents'
 import { useSuspenseQuery, useMutation } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Suspense, useState } from 'react'
