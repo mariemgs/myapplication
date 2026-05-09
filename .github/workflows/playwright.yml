@@ -139,6 +139,7 @@ jobs:
         source .env
         set +a
         bash scripts/generate-client.sh
+        bash scripts/restore-agents-client.sh
     - name: Stop staging if running
       run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
     - name: Create Traefik network
