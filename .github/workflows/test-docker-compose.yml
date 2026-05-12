@@ -86,18 +86,27 @@ jobs:
           path: trivy-image-report.json
           retention-days: 1
 
-      - name: Generate SBOM with Syft
+      - name: Generate SBOM (JSON)
         uses: anchore/sbom-action@v0
         with:
           image: ci-backend:latest
           format: spdx-json
           output-file: sbom.spdx.json
 
-      - name: Upload SBOM artifact
+      - name: Generate SBOM (human readable table)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ci-backend:latest
+          format: table
+          output-file: sbom-table.txt
+
+      - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sbom-report
-          path: sbom.spdx.json
+          path: |
+            sbom.spdx.json
+            sbom-table.txt
           retention-days: 30
 
       - name: Start app
