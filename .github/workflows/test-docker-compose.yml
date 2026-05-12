@@ -1,5 +1,4 @@
 name: Test Docker Compose
-
 on:
   push:
     branches:
@@ -8,9 +7,7 @@ on:
     types:
       - opened
       - synchronize
-
 jobs:
-
   test-docker-compose:
     runs-on: ubuntu-latest
     env:
@@ -22,9 +19,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
       - name: Create .env file
         run: |
-          cat << EOF > .env
+          cat << ENVEOF > .env
           DOMAIN=${{ secrets.DOMAIN }}
           FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
           ENVIRONMENT=${{ secrets.ENVIRONMENT }}
@@ -53,11 +51,11 @@ jobs:
           GH_PAT=${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
           PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
-          EOF
+          ENVEOF
 
+      - name: Build Docker images
+        run: docker compose build
 
-
-      - run: docker compose build
       - name: Scan backend image (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
@@ -80,22 +78,13 @@ jobs:
                   print(f\"{v.get('Severity')} | {v.get('VulnerabilityID')} | {v.get('PkgName')} | {v.get('InstalledVersion')} -> {v.get('FixedVersion')}\")
           " || echo "No vulnerabilities found or parse error"
 
-
-      - name: Upload full Trivy report
+      - name: Upload Trivy image report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: trivy-image-report
           path: trivy-image-report.json
           retention-days: 1
-
-      - run: docker compose down -v --remove-orphans
-      - run: docker compose up -d --wait backend frontend adminer
-      - name: Test backend is up
-        run: curl http://localhost:8000/api/v1/utils/health-check
-      - name: Test frontend is up
-        run: curl http://localhost:5173
-      - run: docker compose down -v --remove-orphans
 
       - name: Generate SBOM with Syft
         uses: anchore/sbom-action@v0
@@ -106,8 +95,20 @@ jobs:
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: sbom-report
           path: sbom.spdx.json
           retention-days: 30
+
+      - name: Start app
+        run: docker compose up -d --wait backend frontend adminer
+
+      - name: Test backend is up
+        run: curl http://localhost:8000/api/v1/utils/health-check/
+
+      - name: Test frontend is up
+        run: curl http://localhost:5173
+
+      - name: Stop Docker Compose
+        if: always()
+        run: docker compose down -v --remove-orphans
