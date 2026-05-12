@@ -96,3 +96,18 @@ jobs:
       - name: Test frontend is up
         run: curl http://localhost:5173
       - run: docker compose down -v --remove-orphans
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ci-backend:latest
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-report
+          path: sbom.spdx.json
+          retention-days: 30
