@@ -53,6 +53,24 @@ jobs:
           PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
           ENVEOF
 
+      - name: Run Checkov (IaC Security Scan)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile,docker_compose
+          soft_fail: true
+          output_format: sarif
+          output_file_path: checkov-report.sarif
+        continue-on-error: true
+
+      - name: Upload Checkov report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checkov-report
+          path: checkov-report.sarif
+          retention-days: 30
+
       - name: Build Docker images
         run: docker compose build
 
