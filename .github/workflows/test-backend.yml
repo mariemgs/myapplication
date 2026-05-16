@@ -80,10 +80,8 @@ jobs:
           mkdir -p ./backend/htmlcov
           BACKEND_ID=$(docker compose ps -q backend)
           echo "Backend container ID: $BACKEND_ID"
-          echo "Checking possible htmlcov locations:"
-          docker exec $BACKEND_ID ls /app/backend/htmlcov/ || echo "Not at /app/backend/htmlcov"
-          docker exec $BACKEND_ID ls /app/htmlcov/ || echo "Not at /app/htmlcov"
-          docker exec $BACKEND_ID find /app -name "*.html" -path "*/htmlcov/*" || echo "No htmlcov html files found anywhere"
+          echo "Checking htmlcov location:"
+          docker exec $BACKEND_ID find /app -name "index.html" 2>/dev/null || echo "index.html not found"
           docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov
           sudo chown -R $USER:$USER ./backend/htmlcov
           echo "Copied files:"
