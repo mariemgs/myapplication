@@ -105,12 +105,19 @@ jobs:
             pip-audit-report.json
           retention-days: 1
 
+      - name: Check htmlcov exists
+        if: always()
+        run: |
+          echo "htmlcov contents:"
+          ls -la backend/htmlcov/ || echo "htmlcov directory is empty or missing"
+
       - name: Store coverage files
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-html
           path: backend/htmlcov
+          if-no-files-found: warn
 
       - name: Coverage report check
         run: docker compose exec -T backend uv run coverage report --fail-under=90 --omit="*/initial_data.py,*/api/routes/agents.py"
