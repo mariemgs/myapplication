@@ -81,7 +81,8 @@ jobs:
           BACKEND_ID=$(docker compose ps -q backend)
           echo "Backend container ID: $BACKEND_ID"
           echo "Checking htmlcov location:"
-          docker exec $BACKEND_ID find /app -name "index.html" 2>/dev/null || echo "index.html not found"
+          docker exec $BACKEND_ID find / -name "index.html" -not -path "*/.venv/*" -not -path "*/site-packages/*" 2>/dev/null || echo "index.html not found outside venv"
+          docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov 2>/dev/null ||           docker cp $BACKEND_ID:/app/htmlcov/. ./backend/htmlcov 2>/dev/null ||           echo "Could not copy htmlcov from any location"
           docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov
           sudo chown -R $USER:$USER ./backend/htmlcov
           echo "Copied files:"
