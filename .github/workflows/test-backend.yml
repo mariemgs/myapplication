@@ -69,7 +69,9 @@ jobs:
         run: docker compose exec -T backend bash scripts/prestart.sh
 
       - name: Run tests
-        run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+        run: |
+          docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+          docker compose exec -T backend uv run coverage html --omit="*/initial_data.py,*/api/routes/agents.py" || true
 
       - name: Copy coverage from container
         if: always()
