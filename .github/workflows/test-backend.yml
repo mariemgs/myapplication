@@ -78,8 +78,13 @@ jobs:
         run: |
           sudo rm -rf ./backend/htmlcov || true
           mkdir -p ./backend/htmlcov
-          docker cp $(docker compose ps -q backend):/app/backend/htmlcov/. ./backend/htmlcov
+          BACKEND_ID=$(docker compose ps -q backend)
+          echo "Backend container ID: $BACKEND_ID"
+          docker exec $BACKEND_ID ls /app/backend/htmlcov/ || echo "htmlcov not found in container"
+          docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov
           sudo chown -R $USER:$USER ./backend/htmlcov
+          echo "Copied files:"
+          ls -la ./backend/htmlcov/
 
       - name: Run SAST (Bandit)
         run: |
