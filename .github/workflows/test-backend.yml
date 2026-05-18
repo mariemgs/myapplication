@@ -16,7 +16,7 @@ jobs:
 
       - name: Create .env file
         run: |
-          cat << EOF > .env
+          cat << ENVEOF > .env
           DOMAIN=${{ secrets.DOMAIN }}
           FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
           ENVIRONMENT=${{ secrets.ENVIRONMENT }}
@@ -45,7 +45,7 @@ jobs:
           GH_PAT=${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
           PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
-          EOF
+          ENVEOF
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -54,11 +54,6 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-
-      - name: Pre-test cleanup
-        run: |
-          sudo rm -rf ./backend/htmlcov || true
-          sudo chown -R $USER:$USER . || true
 
       - name: Start Services
         run: |
@@ -69,20 +64,13 @@ jobs:
         run: docker compose exec -T backend bash scripts/prestart.sh
 
       - name: Run tests
-        run: |
-          docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
-          docker compose exec -T backend uv run coverage html --omit="*/initial_data.py,*/api/routes/agents.py" || true
+        run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
 
       - name: Save coverage report
         if: always()
         run: |
           mkdir -p ./coverage-report
-          docker compose exec -T backend uv run coverage report --omit="*/initial_data.py,*/api/routes/agents.py" > ./coverage-report/coverage.txt || true
-          cat ./coverage-report/coverage.txt
-          docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov
-          sudo chown -R $USER:$USER ./backend/htmlcov
-          echo "Copied files:"
-          ls -la ./backend/htmlcov/
+          docker compose exec -T backend uv run coverage report --omit="*/initial_data.py,*/api/routes/agents.py" 2>&1 | tee ./coverage-report/coverage.txt || true
 
       - name: Run SAST (Bandit)
         run: |
