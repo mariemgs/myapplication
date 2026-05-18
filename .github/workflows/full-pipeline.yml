@@ -1,0 +1,596 @@
+name: Full DevSecOps Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  # ── 1. Unit & Integration Tests ─────────────────────────────────
+  tests:
+    name: 🧪 Unit & Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          cat << ENVEOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS=${{ secrets.SMTP_TLS }}
+          SMTP_SSL=${{ secrets.SMTP_SSL }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          EMAIL=${{ secrets.EMAIL }}
+          POSTGRES_SERVER=db
+          POSTGRES_PORT=5432
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}
+          DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKER_IMAGE_FRONTEND }}
+          GH_PAT=${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
+          PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
+          ENVEOF
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Start Services
+        run: |
+          docker compose down -v --remove-orphans
+          docker compose up -d db mailcatcher backend --build
+
+      - name: Migrate DB
+        run: docker compose exec -T backend bash scripts/prestart.sh
+
+      - name: Run tests
+        run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+
+      - name: Save coverage report
+        if: always()
+        run: |
+          mkdir -p ./coverage-report
+          docker compose exec -T backend uv run coverage report --omit="*/initial_data.py,*/api/routes/agents.py" 2>&1 | tee ./coverage-report/coverage.txt || true
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage-report/
+          retention-days: 7
+
+      - name: Stop Services
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  # ── 2. SAST - Bandit ────────────────────────────────────────────
+  sast-bandit:
+    name: 🔍 SAST - Bandit
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Bandit
+        run: |
+          pip install bandit
+          bandit -r backend -ll -f json -o bandit-report.json || true
+          bandit -r backend -ll || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 7
+
+  # ── 3. Dependency Scan ──────────────────────────────────────────
+  dependency-scan:
+    name: 📦 Dependency Scan - pip-audit
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit -f json -o pip-audit-report.json || true
+          pip-audit || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+          retention-days: 7
+
+  # ── 4. Secrets Scan ─────────────────────────────────────────────
+  secrets-scan:
+    name: 🔐 Secrets Scan - Gitleaks
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── 5. Container Scan ───────────────────────────────────────────
+  container-scan:
+    name: 🐳 Container Scan - Trivy
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          cat << ENVEOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS=${{ secrets.SMTP_TLS }}
+          SMTP_SSL=${{ secrets.SMTP_SSL }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          EMAIL=${{ secrets.EMAIL }}
+          POSTGRES_SERVER=db
+          POSTGRES_PORT=5432
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          DOCKER_IMAGE_BACKEND=ci-backend
+          DOCKER_IMAGE_FRONTEND=ci-frontend
+          ENVEOF
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ci-backend:latest
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          format: json
+          output: trivy-report.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-report.json
+          retention-days: 7
+
+  # ── 6. SBOM ─────────────────────────────────────────────────────
+  sbom:
+    name: 📋 SBOM - Syft
+    runs-on: ubuntu-latest
+    needs: container-scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          cat << ENVEOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS=${{ secrets.SMTP_TLS }}
+          SMTP_SSL=${{ secrets.SMTP_SSL }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          EMAIL=${{ secrets.EMAIL }}
+          POSTGRES_SERVER=db
+          POSTGRES_PORT=5432
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          DOCKER_IMAGE_BACKEND=ci-backend
+          DOCKER_IMAGE_FRONTEND=ci-frontend
+          ENVEOF
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ci-backend:latest
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Generate SBOM table
+        uses: anchore/sbom-action@v0
+        with:
+          image: ci-backend:latest
+          format: table
+          output-file: sbom-table.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-report
+          path: |
+            sbom.spdx.json
+            sbom-table.txt
+          retention-days: 7
+
+  # ── 7. IaC Scan ─────────────────────────────────────────────────
+  iac-scan:
+    name: 🏗️ IaC Scan - Checkov
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile,docker_compose
+          soft_fail: true
+          output_format: sarif
+          output_file_path: checkov-report.sarif
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checkov-report
+          path: checkov-report.sarif
+          retention-days: 7
+
+  # ── 8. Code Quality ─────────────────────────────────────────────
+  code-quality:
+    name: 📊 Code Quality - SonarQube
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create .env file
+        run: |
+          cat << ENVEOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS=${{ secrets.SMTP_TLS }}
+          SMTP_SSL=${{ secrets.SMTP_SSL }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          EMAIL=${{ secrets.EMAIL }}
+          POSTGRES_SERVER=db
+          POSTGRES_PORT=5432
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}
+          DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKER_IMAGE_FRONTEND }}
+          ENVEOF
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Start services
+        run: docker compose up -d db mailcatcher backend --build
+
+      - name: Run tests with coverage
+        run: |
+          docker compose exec -T backend uv run pytest tests/ \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --omit="*/initial_data.py,*/api/routes/agents.py" || true
+
+      - name: Copy coverage xml
+        run: |
+          docker cp $(docker compose ps -q backend):/app/backend/coverage.xml coverage.xml || true
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.sources=backend/app
+            -Dsonar.tests=backend/tests
+            -Dsonar.projectKey=mariemgs_myapplication
+            -Dsonar.coverage.exclusions=**/agents.py,**/main.py,**/initial_data.py
+            -Dsonar.qualitygate.wait=false
+
+  # ── 9. DAST ─────────────────────────────────────────────────────
+  dast:
+    name: 🌐 DAST - OWASP ZAP
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          cat << ENVEOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS=${{ secrets.SMTP_TLS }}
+          SMTP_SSL=${{ secrets.SMTP_SSL }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          EMAIL=${{ secrets.EMAIL }}
+          POSTGRES_SERVER=db
+          POSTGRES_PORT=5432
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}
+          DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKER_IMAGE_FRONTEND }}
+          ENVEOF
+
+      - name: Start app
+        run: docker compose up -d --build
+
+      - name: Wait for backend
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/api/v1/utils/health-check/ | grep -q "true"; then
+              echo "Backend ready!"
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Run OWASP ZAP
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "http://localhost:8000"
+          rules_file_name: ".zap/rules.tsv"
+          cmd_options: "-a"
+          fail_action: false
+        continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-report
+          path: report_html.html
+          retention-days: 7
+
+      - name: Stop app
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  # ── 10. E2E Tests ───────────────────────────────────────────────
+  e2e-tests:
+    name: 🎭 E2E Tests - Playwright
+    runs-on: self-hosted
+    needs: tests
+    steps:
+      - name: Fix permissions
+        run: |
+          sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
+          sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
+          sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
+          mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
+          mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
+          chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
+          chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
+
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Create .env file
+        run: |
+          cat << ENVEOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS=${{ secrets.SMTP_TLS }}
+          SMTP_SSL=${{ secrets.SMTP_SSL }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          EMAIL=${{ secrets.EMAIL }}
+          POSTGRES_SERVER=${{ secrets.POSTGRES_SERVER }}
+          POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}
+          DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKER_IMAGE_FRONTEND }}
+          GH_PAT=${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
+          PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
+          ENVEOF
+
+      - run: uv sync
+        working-directory: backend
+
+      - run: bun ci
+        working-directory: frontend
+
+      - name: Generate client
+        run: |
+          set -a
+          source .env
+          set +a
+          bash scripts/generate-client.sh
+          bash scripts/restore-agents-client.sh
+
+      - name: Stop staging if running
+        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
+
+      - name: Create Traefik network
+        run: docker network create traefik-public || true
+
+      - run: docker compose build
+
+      - run: docker compose down -v --remove-orphans
+
+      - name: Run Playwright tests
+        run: docker compose run --rm playwright bunx playwright test --trace=retain-on-failure
+
+      - run: docker compose down -v --remove-orphans
+
+      - name: Fix report permissions
+        if: always()
+        run: |
+          sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/ || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: frontend/blob-report
+          retention-days: 7
+
+      - name: Restart staging
+        if: always()
+        run: |
+          cd /home/meriemguesmi/projects/full-stack-fastapi-template
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
+          docker volume rm myapp-staging_app-db-data || true
+          sleep 5
+          VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
+
+  # ── 11. Deploy ──────────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy to Staging
+    runs-on: self-hosted
+    needs: [sast-bandit, dependency-scan, secrets-scan, container-scan, iac-scan, dast, e2e-tests]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Fix permissions
+        run: |
+          sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
+          sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
+
+      - uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          cat << ENVEOF > .env
+          DOMAIN=${{ secrets.DOMAIN }}
+          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
+          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS=${{ secrets.SMTP_TLS }}
+          SMTP_SSL=${{ secrets.SMTP_SSL }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          EMAIL=${{ secrets.EMAIL }}
+          POSTGRES_SERVER=${{ secrets.POSTGRES_SERVER }}
+          POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}
+          DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKER_IMAGE_FRONTEND }}
+          GH_PAT=${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
+          PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
+          ENVEOF
+
+      - name: Create Traefik network
+        run: docker network create traefik-public || true
+
+      - name: Stop existing containers
+        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
+
+      - name: Remove old db volume
+        run: docker volume rm myapp-staging_app-db-data || true
+
+      - name: Build
+        run: VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging build
+
+      - name: Deploy
+        run: VITE_API_URL=http://192.168.29.131:8000 docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
+
+      - name: Verify deployment
+        run: |
+          sleep 15
+          curl -s http://192.168.29.131:8000/api/v1/utils/health-check/ | grep -q "true" && echo "✅ Deployment successful!" || echo "❌ Health check failed"
