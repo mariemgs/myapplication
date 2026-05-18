@@ -73,20 +73,12 @@ jobs:
           docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
           docker compose exec -T backend uv run coverage html --omit="*/initial_data.py,*/api/routes/agents.py" || true
 
-      - name: Copy coverage from container
+      - name: Save coverage report
         if: always()
         run: |
-          sudo rm -rf ./backend/htmlcov || true
-          mkdir -p ./backend/htmlcov
-          BACKEND_ID=$(docker compose ps -q backend)
-          echo "Backend container ID: $BACKEND_ID"
-          echo "Generating HTML report inside container..."
-          docker exec $BACKEND_ID sh -c "cd /app/backend && uv run coverage html --omit=*/initial_data.py,*/api/routes/agents.py" || true
-          echo "Checking generated htmlcov:"
-          docker exec $BACKEND_ID ls /app/backend/htmlcov/ || echo "htmlcov still empty"
-          docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov || true
-          echo "Copied files:"
-          ls -la ./backend/htmlcov/ | head -5
+          mkdir -p ./coverage-report
+          docker compose exec -T backend uv run coverage report --omit="*/initial_data.py,*/api/routes/agents.py" > ./coverage-report/coverage.txt || true
+          cat ./coverage-report/coverage.txt
           docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov
           sudo chown -R $USER:$USER ./backend/htmlcov
           echo "Copied files:"
@@ -118,18 +110,12 @@ jobs:
             pip-audit-report.json
           retention-days: 1
 
-      - name: Check htmlcov exists
-        if: always()
-        run: |
-          echo "htmlcov contents:"
-          ls -la backend/htmlcov/ || echo "htmlcov directory is empty or missing"
-
-      - name: Store coverage files
+      - name: Store coverage report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-html
-          path: backend/htmlcov
+          path: coverage-report/
           if-no-files-found: warn
 
       - name: Coverage report check
