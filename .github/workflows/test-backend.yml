@@ -80,9 +80,13 @@ jobs:
           mkdir -p ./backend/htmlcov
           BACKEND_ID=$(docker compose ps -q backend)
           echo "Backend container ID: $BACKEND_ID"
-          echo "Checking htmlcov location:"
-          docker exec $BACKEND_ID find / -name "index.html" -not -path "*/.venv/*" -not -path "*/site-packages/*" 2>/dev/null || echo "index.html not found outside venv"
-          docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov 2>/dev/null ||           docker cp $BACKEND_ID:/app/htmlcov/. ./backend/htmlcov 2>/dev/null ||           echo "Could not copy htmlcov from any location"
+          echo "Generating HTML report inside container..."
+          docker exec $BACKEND_ID sh -c "cd /app/backend && uv run coverage html --omit=*/initial_data.py,*/api/routes/agents.py" || true
+          echo "Checking generated htmlcov:"
+          docker exec $BACKEND_ID ls /app/backend/htmlcov/ || echo "htmlcov still empty"
+          docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov || true
+          echo "Copied files:"
+          ls -la ./backend/htmlcov/ | head -5
           docker cp $BACKEND_ID:/app/backend/htmlcov/. ./backend/htmlcov
           sudo chown -R $USER:$USER ./backend/htmlcov
           echo "Copied files:"
