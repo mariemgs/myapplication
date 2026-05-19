@@ -37,3 +37,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# Temporary test to trigger failure
+def test_force_failure():
+    assert False, "This is a forced failure to test the AI failure analyzer"
