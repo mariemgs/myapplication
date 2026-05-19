@@ -110,3 +110,4 @@ def delete_item(
     session.delete(item)
     session.commit()
     return Message(message="Item deleted successfully")
+import this_module_does_not_exist
