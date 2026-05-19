@@ -594,3 +594,68 @@ jobs:
         run: |
           sleep 15
           curl -s http://192.168.29.131:8000/api/v1/utils/health-check/ | grep -q "true" && echo "✅ Deployment successful!" || echo "❌ Health check failed"
+
+  # ── 12. AI Orchestrator ─────────────────────────────────────────
+  ai-orchestrator:
+    name: 🤖 AI Orchestrator
+    runs-on: self-hosted
+    needs: [sast-bandit, dependency-scan, secrets-scan, container-scan, iac-scan, code-quality, dast, e2e-tests, deploy]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip3 install langgraph langchain langchain-groq langchain-core requests
+
+      - name: Download security reports
+        uses: actions/download-artifact@v4
+        with:
+          name: bandit-report
+          path: security-reports/
+        continue-on-error: true
+
+      - name: Download trivy report
+        uses: actions/download-artifact@v4
+        with:
+          name: trivy-report
+          path: security-reports/
+        continue-on-error: true
+
+      - name: Download pip-audit report
+        uses: actions/download-artifact@v4
+        with:
+          name: pip-audit-report
+          path: security-reports/
+        continue-on-error: true
+
+      - name: Download ZAP report
+        uses: actions/download-artifact@v4
+        with:
+          name: zap-report
+          path: zap-report/
+        continue-on-error: true
+
+      - name: List downloaded reports
+        run: |
+          echo "Security reports:"
+          ls -la security-reports/ || echo "No security reports"
+          echo "ZAP report:"
+          ls -la zap-report/ || echo "No ZAP report"
+
+      - name: Run AI Orchestrator
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA: ${{ github.sha }}
+          PROMETHEUS_URL: "http://192.168.29.131:9090"
+        run: python3 -m agents.orchestrator
+
+      - name: Upload orchestrator report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestrator-report-${{ github.run_number }}
+          path: orchestrator-report/
+          retention-days: 30
