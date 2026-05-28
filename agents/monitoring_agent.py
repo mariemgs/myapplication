@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 # Configuration
 GITHUB_TOKEN = os.environ.get("GH_PAT")
 REPO = os.environ.get("GITHUB_REPOSITORY")
-PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://192.168.29.131:9090")
+PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 
 # Thresholds
 ERROR_RATE_THRESHOLD = 0.05
