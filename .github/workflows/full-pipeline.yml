@@ -531,8 +531,10 @@ jobs:
         run: |
           cd /home/meriemguesmi/projects/full-stack-fastapi-template
           docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
-          docker volume rm myapp-staging_app-db-data || true
+          docker stop $(docker ps -q) 2>/dev/null || true
           sleep 5
+          docker volume rm myapp-staging_app-db-data || true
+          sleep 3
           VITE_API_URL=${{ secrets.VITE_API_URL }} docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
 
   # ── 11. Deploy ──────────────────────────────────────────────────
@@ -586,7 +588,10 @@ jobs:
         run: docker network create traefik-public || true
 
       - name: Stop existing containers
-        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
+        run: |
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
+          docker stop $(docker ps -q) 2>/dev/null || true
+          sleep 3
 
       - name: Remove old db volume
         run: docker volume rm myapp-staging_app-db-data || true
