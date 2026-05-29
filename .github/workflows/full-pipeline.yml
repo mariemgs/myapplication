@@ -174,7 +174,7 @@ jobs:
           ENVEOF
 
       - name: Build images
-        run: docker compose build
+        run: docker compose build backend
 
       - name: Run Trivy
         uses: aquasecurity/trivy-action@master
