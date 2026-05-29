@@ -18,6 +18,7 @@ class AgentState(TypedDict):
     trivy_results: str
     pipaudit_results: str
     zap_results: str
+    checkov_results: str
     # Agent outputs
     security_analysis: str
     monitoring_analysis: str
@@ -103,6 +104,22 @@ def read_report(filepath: str) -> str:
                 
                 return summary
 
+            # SARIF format (Checkov)
+            if "\$schema" in data or "runs" in data:
+                runs = data.get("runs", [])
+                results = []
+                for run in runs:
+                    for result in run.get("results", []):
+                        level = result.get("level", "warning")
+                        msg = result.get("message", {}).get("text", "")[:100]
+                        rule_id = result.get("ruleId", "")
+                        results.append(f"- [{level.upper()}] {rule_id}: {msg}")
+                if not results:
+                    return "✅ No IaC issues found by Checkov"
+                return f"**{len(results)} IaC issues found:**
+" + "
+".join(results[:15])
+
             # pip-audit format
             if "dependencies" in data:
                 vulns = []
@@ -151,16 +168,19 @@ def data_fetcher_node(state: AgentState) -> AgentState:
     trivy = read_report("security-reports/trivy-report.json")
     pipaudit = read_report("security-reports/pip-audit-report.json")
     zap = read_report("zap-report/report_html.html")
+    checkov = read_report("security-reports/checkov-report.sarif")
 
     print(f"  ✅ Bandit: {bandit[:60]}...")
     print(f"  ✅ Trivy: {trivy[:60]}...")
     print(f"  ✅ pip-audit: {pipaudit[:60]}...")
+    print(f"  ✅ Checkov: {checkov[:60]}...")
 
     return {
         "bandit_results": bandit,
         "trivy_results": trivy,
         "pipaudit_results": pipaudit,
         "zap_results": zap,
+        "checkov_results": checkov,
     }
 
 
@@ -186,6 +206,12 @@ Do NOT give generic advice if there are no real findings."""),
 
 ## 🌐 OWASP ZAP (Dynamic scan):
 {state.get('zap_results')[:300] if state.get('zap_results') else 'Not available'}
+
+## 🏗️ Checkov (IaC Security):
+{state.get('checkov_results', 'Not available')[:500]}
+
+## 🏗️ Checkov (IaC Security):
+{state.get('checkov_results', 'Not available')[:500]}
 
 Provide:
 ### Executive Summary
@@ -348,6 +374,8 @@ def main():
         "trivy_results": "",
         "pipaudit_results": "",
         "zap_results": "",
+        "checkov_results": "",
+        "checkov_results": "",
         "security_analysis": "",
         "monitoring_analysis": "",
         "final_report": "",

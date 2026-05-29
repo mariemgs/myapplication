@@ -647,6 +647,13 @@ jobs:
           path: zap-report/
         continue-on-error: true
 
+      - name: Download Checkov report
+        uses: actions/download-artifact@v4
+        with:
+          name: checkov-report
+          path: security-reports/
+        continue-on-error: true
+
       - name: List downloaded reports
         run: |
           echo "Security reports:"
