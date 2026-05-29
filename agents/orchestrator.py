@@ -148,7 +148,7 @@ def data_fetcher_node(state: AgentState) -> AgentState:
     print("📥 Node 1: Fetching security reports and metrics...")
 
     bandit = read_report("security-reports/bandit-report.json")
-    trivy = read_report("security-reports/trivy-image-report.json")
+    trivy = read_report("security-reports/trivy-report.json")
     pipaudit = read_report("security-reports/pip-audit-report.json")
     zap = read_report("zap-report/report_html.html")
 
