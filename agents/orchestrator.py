@@ -116,9 +116,10 @@ def read_report(filepath: str) -> str:
                         results.append(f"- [{level.upper()}] {rule_id}: {msg}")
                 if not results:
                     return "✅ No IaC issues found by Checkov"
-                return f"**{len(results)} IaC issues found:**
+                summary = f"**{len(results)} IaC issues found:**
 " + "
 ".join(results[:15])
+                return summary
 
             # pip-audit format
             if "dependencies" in data:
