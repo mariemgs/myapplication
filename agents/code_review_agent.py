@@ -1,204 +1,322 @@
 import os
+import json
 import base64
+import subprocess
 import requests
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
 
-# ── Configuration ────────────────────────────────────────────────────────────
+# ── Configuration ─────────────────────────────────────────────────────────────
 GITHUB_TOKEN = os.environ.get("GH_PAT")
 REPO         = os.environ.get("GITHUB_REPOSITORY")
 PR_NUMBER    = os.environ.get("PR_NUMBER")
 HEAD_SHA     = os.environ.get("HEAD_SHA")
 
-# ── Tuneable constants ────────────────────────────────────────────────────────
-MAX_DIFF_CHARS      = 12_000
-MAX_ANALYSIS_CHARS  = 4_000
-MAX_FIX_CHARS       = 3_000
-MAX_RETRIES         = 3
+MAX_DIFF_CHARS     = 12000
+MAX_ANALYSIS_CHARS = 4000
+MAX_RETRIES        = 3
 
-# ── LLM setup ────────────────────────────────────────────────────────────────
 llm = ChatGroq(
     model="llama-3.3-70b-versatile",
-    temperature=0.2,
+    temperature=0.1,
     api_key=os.environ.get("GROQ_API_KEY"),
 )
 
 HEADERS = {
-    "Authorization": f"token {GITHUB_TOKEN}",
+    "Authorization": "token {}".format(GITHUB_TOKEN),
     "Accept": "application/vnd.github.v3+json",
 }
 
+SKIP_PATTERNS = [
+    ".lock", ".json", ".yml", ".yaml", "migration",
+    "alembic", "__pycache__", ".min.js", ".map",
+    "node_modules", "dist/", "build/"
+]
 
-# ── GitHub helpers ────────────────────────────────────────────────────────────
 
-def gh_request(method: str, url: str, **kwargs) -> requests.Response:
-    """Thin wrapper with retry logic for transient GitHub API errors."""
+# ── GitHub helpers ─────────────────────────────────────────────────────────────
+def gh_request(method, url, **kwargs):
     for attempt in range(1, MAX_RETRIES + 1):
         resp = requests.request(method, url, headers=HEADERS, **kwargs)
         if resp.status_code in (429, 500, 502, 503):
-            print(f"⚠️  GitHub API {resp.status_code} — retry {attempt}/{MAX_RETRIES}")
+            print("GitHub API {} — retry {}/{}".format(resp.status_code, attempt, MAX_RETRIES))
             continue
         return resp
-    return resp  # return last response after exhausting retries
+    return resp
 
 
-def get_pr_diff() -> tuple[list | None, str]:
-    """Fetch changed files and build a unified diff string."""
-    url  = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/files"
+def get_pr_diff():
+    url  = "https://api.github.com/repos/{}/pulls/{}/files".format(REPO, PR_NUMBER)
     resp = gh_request("GET", url)
-
     if resp.status_code != 200:
-        return None, f"Could not fetch PR files: {resp.status_code}"
+        return None, "Could not fetch PR files: {}".format(resp.status_code)
 
-    files        = resp.json()
-    diff_parts   = []
-    total_chars  = 0
+    files      = resp.json()
+    diff_parts = []
+    total      = 0
 
     for f in files:
+        filename = f.get("filename", "")
+        # Skip non-relevant files
+        if any(p in filename for p in SKIP_PATTERNS):
+            continue
+
         patch = f.get("patch", "")
         if not patch:
             continue
-        block = f"## File: {f['filename']} ({f.get('status','')})\n```diff\n{patch}\n```"
 
-        # Budget-aware truncation with clear warning
-        if total_chars + len(block) > MAX_DIFF_CHARS:
-            remaining = MAX_DIFF_CHARS - total_chars
+        block = "## File: {} ({})\n```diff\n{}\n```".format(
+            filename, f.get("status", ""), patch)
+
+        if total + len(block) > MAX_DIFF_CHARS:
+            remaining = MAX_DIFF_CHARS - total
             if remaining > 200:
-                diff_parts.append(block[:remaining] + "\n⚠️  [truncated — diff too large]")
-            diff_parts.append("⚠️  Remaining files omitted — diff exceeded budget.")
+                diff_parts.append(block[:remaining] + "\n[truncated]")
             break
 
         diff_parts.append(block)
-        total_chars += len(block)
+        total += len(block)
 
     return files, "\n\n".join(diff_parts)
 
 
-# ── LLM analysis passes ───────────────────────────────────────────────────────
+def get_python_files(files):
+    return [f["filename"] for f in files if f["filename"].endswith(".py")
+            and not any(p in f["filename"] for p in SKIP_PATTERNS)]
 
-REVIEW_SYSTEM = """\
-You are an expert code reviewer. Evaluate the diff for:
-- Security vulnerabilities (OWASP Top 10, secret leakage, injection)
-- Correctness and edge-case bugs
+
+# ── Pass 1: Security & Quality Review ─────────────────────────────────────────
+def pass_security_review(diff):
+    print("Pass 1: Security and quality review...")
+    messages = [
+        SystemMessage(content="""You are a security-focused code reviewer.
+CRITICAL RULES:
+- Only report issues you can PROVE exist in the diff with exact file name and line number
+- Do NOT invent issues. If you cannot cite exact evidence from the diff, do not report it
+- Reference the actual code from the diff when describing issues
+- Format each issue as: FILE:LINE_NUMBER - SEVERITY - description
+
+Check for:
+- Security vulnerabilities (OWASP Top 10, injection, secrets in code)
 - Error handling gaps
-- FastAPI / Docker / DevOps best practices
-- Missing or inadequate tests
-- PEP 8 and clean-code compliance
-
-Return STRICT structured markdown with exactly these sections:
-## Verdict
-One of: APPROVE | REQUEST_CHANGES | COMMENT
-## Critical Issues
-## Code Quality Issues
-## Positive Points
-## Suggested Fixes
-"""
-
-OPTIMIZATION_SYSTEM = """\
-You are an algorithm and performance optimization expert. Analyze the diff for:
-
-1. **Time Complexity** — identify O(n²) or worse patterns; suggest O(n log n) or better alternatives
-2. **Space Complexity** — unnecessary data copies, large in-memory structures; suggest generators/streaming
-3. **Pythonic Patterns** — replace manual loops with list comprehensions, map/filter, itertools, collections
-4. **Async / Concurrency** — blocking I/O that could be async; ThreadPoolExecutor / asyncio opportunities
-5. **Database & I/O** — N+1 query patterns, missing batching, redundant API calls
-6. **Caching** — repeated computations that could be memoized (functools.lru_cache, cachetools)
-7. **Memory Layout** — use of __slots__, dataclasses, namedtuples for hot objects
-
-For every suggestion provide:
-- The original code snippet (from the diff)
-- The complexity BEFORE (e.g. O(n²) time, O(n) space)
-- The optimized version with concrete code
-- The complexity AFTER
-
-Return structured markdown. Be specific; reference file names.
-"""
-
-
-def analyze_review(diff: str) -> str:
-    """Pass 1 — security, correctness, style."""
-    messages = [
-        SystemMessage(content=REVIEW_SYSTEM),
-        HumanMessage(content=f"PR Diff:\n{diff}"),
+- FastAPI best practices
+- Missing input validation"""),
+        HumanMessage(content="Review this diff:\n\n{}".format(diff))
     ]
     try:
         return llm.invoke(messages).content
     except Exception as e:
-        return f"⚠️ Review error: {e}"
+        return "Review error: {}".format(e)
 
 
-def analyze_optimizations(diff: str) -> str:
-    """Pass 2 — algorithmic & performance optimization (your new idea)."""
+# ── Pass 2: SOLID & Best Practices ────────────────────────────────────────────
+def pass_solid_review(diff):
+    print("Pass 2: SOLID principles review...")
     messages = [
-        SystemMessage(content=OPTIMIZATION_SYSTEM),
-        HumanMessage(content=f"PR Diff to optimize:\n{diff}"),
+        SystemMessage(content="""You are a software architecture expert reviewing for SOLID principles.
+CRITICAL RULES:
+- Only flag violations you can point to with exact file name and line number from the diff
+- Do NOT invent violations. Cite exact code snippets from the diff as evidence
+- If the diff is too small to evaluate a principle, say so explicitly
+
+Check for:
+- S: Single Responsibility — does each class/function do one thing?
+- O: Open/Closed — is code open for extension but closed for modification?
+- L: Liskov Substitution — are subtypes substitutable?
+- I: Interface Segregation — are interfaces too large?
+- D: Dependency Inversion — does code depend on abstractions?
+
+Also check: DRY, KISS, clean code naming conventions"""),
+        HumanMessage(content="Review this diff for SOLID violations:\n\n{}".format(diff))
     ]
     try:
         return llm.invoke(messages).content
     except Exception as e:
-        return f"⚠️ Optimization analysis error: {e}"
+        return "SOLID review error: {}".format(e)
 
 
-def generate_fixed_code(files: list, review: str, optimizations: str) -> str:
-    """Pass 3 — produce concrete fixed + optimized file contents."""
-    python_files = [f["filename"] for f in files if f["filename"].endswith(".py")]
+# ── Pass 3: Performance & Optimization ────────────────────────────────────────
+def pass_optimization(diff, python_files):
+    if not python_files:
+        return "No Python files to optimize."
+    print("Pass 3: Performance optimization review...")
     messages = [
-        SystemMessage(content="You are an expert Python developer. Output ONLY fixed code blocks, no prose."),
-        HumanMessage(content=f"""\
-Based on this review:
-{review[:MAX_ANALYSIS_CHARS]}
+        SystemMessage(content="""You are a Python performance expert.
+CRITICAL RULES:
+- Only suggest optimizations for code that actually exists in the diff
+- Cite exact file name and line number for every suggestion
+- Show the original code snippet and the optimized version
 
-And these optimization suggestions:
-{optimizations[:MAX_ANALYSIS_CHARS]}
-
-For each file in {python_files} that needs changes, output:
-
-FILE: path/to/file.py
-```python
-# complete corrected + optimized file
-```
-
-Only include files with actual changes needed."""),
+Check for:
+- Time complexity issues (O(n²) or worse)
+- Unnecessary loops that could use list comprehensions
+- Missing async/await for I/O operations
+- N+1 query patterns
+- Opportunities for caching with functools.lru_cache"""),
+        HumanMessage(content="Optimize this diff:\n\n{}".format(diff))
     ]
     try:
         return llm.invoke(messages).content
     except Exception as e:
-        return f"⚠️ Fix generation error: {e}"
+        return "Optimization error: {}".format(e)
 
 
-# ── Verdict parsing ───────────────────────────────────────────────────────────
+# ── Pass 4: Validation (Anti-Hallucination) ───────────────────────────────────
+def pass_validation(diff, security_review, solid_review, optimization):
+    print("Pass 4: Validating findings (anti-hallucination)...")
+    messages = [
+        SystemMessage(content="""You are a strict fact-checker for code reviews.
+Your job is to validate that every issue mentioned in the reviews actually exists in the diff.
 
-def parse_verdict(review: str) -> str:
-    """Extract the structured verdict from the LLM review."""
-    for line in review.splitlines():
-        upper = line.strip().upper()
-        if "REQUEST_CHANGES" in upper:
-            return "REQUEST_CHANGES"
-        if "APPROVE" in upper:
-            return "APPROVE"
-    return "COMMENT"
+For each issue found in the reviews:
+1. Search for it in the diff
+2. If you can find the exact code being referenced: mark as VALID
+3. If you cannot find it in the diff: mark as HALLUCINATED and remove it
+
+Return a clean validated report with only VALID findings.
+Format:
+## Validated Security Issues
+## Validated SOLID Violations  
+## Validated Optimizations
+## Removed (Hallucinated) Issues
+"""),
+        HumanMessage(content="""DIFF:
+{}
+
+SECURITY REVIEW:
+{}
+
+SOLID REVIEW:
+{}
+
+OPTIMIZATION:
+{}
+
+Validate all findings against the diff.""".format(
+            diff,
+            security_review[:2000],
+            solid_review[:2000],
+            optimization[:2000]
+        ))
+    ]
+    try:
+        return llm.invoke(messages).content
+    except Exception as e:
+        return "Validation error: {}".format(e)
 
 
-# ── GitHub posting ────────────────────────────────────────────────────────────
+# ── Post inline comments ───────────────────────────────────────────────────────
+def post_inline_comments(files, validated_report):
+    print("Posting inline comments...")
+    messages = [
+        SystemMessage(content="""Extract inline comments from this validated review report.
+Return a JSON array only, no other text:
+[
+  {
+    "path": "exact/file/path.py",
+    "line": 42,
+    "body": "comment text"
+  }
+]
+Only include items where you have an exact file path and line number.
+If you cannot extract structured comments, return an empty array: []"""),
+        HumanMessage(content=validated_report[:3000])
+    ]
 
-def post_pr_review(review: str, optimizations: str) -> bool:
-    """Post the combined review + optimization report as a PR review."""
-    verdict = parse_verdict(review)
-    body = f"""## 🤖 AI Code Review
+    try:
+        response = llm.invoke(messages).content
+        # Clean JSON
+        response = response.strip()
+        if response.startswith("```"):
+            response = response.split("```")[1]
+            if response.startswith("json"):
+                response = response[4:]
+        comments = json.loads(response.strip())
+    except Exception as e:
+        print("Could not parse inline comments: {}".format(e))
+        return
 
-{review}
+    # Get valid file paths from PR
+    valid_paths = {f["filename"] for f in files}
+    posted = 0
+
+    for comment in comments[:10]:  # limit to 10 inline comments
+        path = comment.get("path", "")
+        line = comment.get("line")
+        body = comment.get("body", "")
+
+        if path not in valid_paths or not line or not body:
+            continue
+
+        url  = "https://api.github.com/repos/{}/pulls/{}/comments".format(REPO, PR_NUMBER)
+        resp = gh_request("POST", url, json={
+            "commit_id": HEAD_SHA,
+            "path": path,
+            "line": line,
+            "body": "**AI Review:** {}".format(body),
+            "side": "RIGHT"
+        })
+
+        if resp.status_code in (200, 201):
+            posted += 1
+        else:
+            print("Inline comment failed: {} - {}".format(resp.status_code, resp.text[:100]))
+
+    print("Posted {} inline comments".format(posted))
+
+
+# ── Post PR review summary ─────────────────────────────────────────────────────
+def post_pr_review(validated_report, security_review, solid_review, optimization):
+    verdict = "COMMENT"
+    lower = validated_report.lower()
+    if "critical" in lower or "high" in lower:
+        verdict = "REQUEST_CHANGES"
+    elif "no issues" in lower or "no violations" in lower:
+        verdict = "APPROVE"
+
+    body = """## AI Code Review Report
+
+> This review was validated to remove hallucinated findings. Only issues found in the actual diff are reported.
 
 ---
 
-## ⚡ Algorithmic Optimization Report
-
-{optimizations}
+{}
 
 ---
-*Powered by LangChain + Groq (Llama 3.3) • Two-pass AI Review Agent*
-*Automated review — apply human judgment before merging.*
-"""
-    url  = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/reviews"
+
+### Raw Analysis Details
+
+<details>
+<summary>Security & Quality Review</summary>
+
+{}
+
+</details>
+
+<details>
+<summary>SOLID Principles Review</summary>
+
+{}
+
+</details>
+
+<details>
+<summary>Performance Optimization</summary>
+
+{}
+
+</details>
+
+---
+*4-Pass AI Code Review: Security -> SOLID -> Optimization -> Validation*
+*Powered by Groq (Llama-3.3-70b) | Hallucination filter applied*""".format(
+        validated_report,
+        security_review[:1500],
+        solid_review[:1500],
+        optimization[:1500]
+    )
+
+    url  = "https://api.github.com/repos/{}/pulls/{}/reviews".format(REPO, PR_NUMBER)
     resp = gh_request("POST", url, json={
         "commit_id": HEAD_SHA,
         "body": body,
@@ -207,96 +325,110 @@ def post_pr_review(review: str, optimizations: str) -> bool:
     })
 
     if resp.status_code in (200, 201):
-        print(f"✅ Review posted — verdict: {verdict}")
+        print("Review posted — verdict: {}".format(verdict))
         return True
-
-    print(f"❌ Failed to post review: {resp.status_code} {resp.text}")
+    print("Failed to post review: {} {}".format(resp.status_code, resp.text[:200]))
     return False
 
 
-def create_fix_pr(files: list, review: str, optimizations: str) -> None:
-    """Open a dedicated PR that contains AI-suggested fixes and optimisations."""
-    print("🔧 Generating fixes...")
-    fixes = generate_fixed_code(files, review, optimizations)
+# ── Create fix PR ──────────────────────────────────────────────────────────────
+def create_fix_pr(files, validated_report, security_review, solid_review, optimization):
+    print("Generating fix suggestions...")
 
-    # Resolve base SHA from the original PR
-    pr_resp = gh_request("GET", f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}")
+    python_files = get_python_files(files)
+    if not python_files:
+        print("No Python files to fix")
+        return
+
+    messages = [
+        SystemMessage(content="You are an expert Python developer. Provide concrete fix suggestions based only on validated issues."),
+        HumanMessage(content="""Based on these VALIDATED issues (hallucinations already removed):
+{}
+
+For each file that needs changes: {}
+
+Provide specific fix suggestions with:
+- The exact problematic code
+- The fixed version
+- Why this fix addresses the issue
+
+Only suggest fixes for issues that appear in the validated report.""".format(
+            validated_report[:2000],
+            python_files
+        ))
+    ]
+
+    try:
+        fixes = llm.invoke(messages).content
+    except Exception as e:
+        fixes = "Could not generate fixes: {}".format(e)
+
+    # Get base SHA
+    pr_resp = gh_request("GET", "https://api.github.com/repos/{}/pulls/{}".format(REPO, PR_NUMBER))
     if pr_resp.status_code != 200:
-        print("❌ Could not fetch PR metadata")
+        print("Could not fetch PR metadata")
         return
 
     base_sha   = pr_resp.json()["head"]["sha"]
-    fix_branch = f"ai-fixes/pr-{PR_NUMBER}"
+    fix_branch = "ai-fixes/pr-{}".format(PR_NUMBER)
 
-    # Idempotent branch creation
-    ref_url = f"https://api.github.com/repos/{REPO}/git/refs/heads/{fix_branch}"
+    # Clean up old branch if exists
+    ref_url = "https://api.github.com/repos/{}/git/refs/heads/{}".format(REPO, fix_branch)
     if gh_request("GET", ref_url).status_code == 200:
         gh_request("DELETE", ref_url)
-        print(f"🗑️  Removed stale branch: {fix_branch}")
 
-    br_resp = gh_request("POST", f"https://api.github.com/repos/{REPO}/git/refs", json={
-        "ref": f"refs/heads/{fix_branch}",
+    # Create branch
+    br_resp = gh_request("POST", "https://api.github.com/repos/{}/git/refs".format(REPO), json={
+        "ref": "refs/heads/{}".format(fix_branch),
         "sha": base_sha,
     })
     if br_resp.status_code not in (200, 201):
-        print(f"❌ Could not create branch: {br_resp.status_code}")
+        print("Could not create branch: {}".format(br_resp.status_code))
         return
-    print(f"✅ Branch created: {fix_branch}")
 
-    # Commit the summary document
-    summary = f"""# AI Review & Optimization Report — PR #{PR_NUMBER}
+    # Commit fix document
+    summary = "# AI Fix Suggestions for PR #{}\n\n".format(PR_NUMBER)
+    summary += "## Validated Issues Found\n{}\n\n".format(validated_report[:2000])
+    summary += "## Suggested Fixes\n{}\n\n".format(fixes[:2000])
+    summary += "---\n*Generated by 4-Pass AI Code Review Agent*\n"
+    summary += "*All issues validated against actual diff — hallucinations removed*\n"
 
-## 🔒 Code Review
-{review[:MAX_ANALYSIS_CHARS]}
-
-## ⚡ Optimization Suggestions
-{optimizations[:MAX_ANALYSIS_CHARS]}
-
-## 🛠 Suggested Fixed Files
-{fixes[:MAX_FIX_CHARS]}
-
----
-*Generated by AI Code Review Agent • LangChain + Groq*
-"""
     file_resp = gh_request(
         "PUT",
-        f"https://api.github.com/repos/{REPO}/contents/ai-review/pr-{PR_NUMBER}-fixes.md",
+        "https://api.github.com/repos/{}/contents/ai-review/pr-{}-fixes.md".format(REPO, PR_NUMBER),
         json={
-            "message": f"🤖 AI review + optimization fixes for PR #{PR_NUMBER}",
+            "message": "AI fix suggestions for PR #{}".format(PR_NUMBER),
             "content": base64.b64encode(summary.encode()).decode(),
             "branch": fix_branch,
         },
     )
+
     if file_resp.status_code not in (200, 201):
-        print(f"❌ Could not commit fix file: {file_resp.status_code}")
+        print("Could not commit fix file: {}".format(file_resp.status_code))
         return
 
-    # Open the fix PR
+    # Open fix PR
     fix_pr_resp = gh_request(
         "POST",
-        f"https://api.github.com/repos/{REPO}/pulls",
+        "https://api.github.com/repos/{}/pulls".format(REPO),
         json={
-            "title": f"🤖 AI Fixes + Optimizations for PR #{PR_NUMBER}",
-            "body": f"""## 🤖 AI-Generated Fixes & Optimizations
+            "title": "AI Fix Suggestions for PR #{}".format(PR_NUMBER),
+            "body": """## AI-Generated Fix Suggestions
 
-> ⚠️ Human review required before merging.
+> Human review required before merging.
+> All suggestions were validated — hallucinated issues removed.
 
-### What changed
-- Fixed critical issues from the review
-- Applied algorithmic optimizations (complexity improvements, Pythonic rewrites, async suggestions)
+### Validated Issues
+{}
 
-### Review Summary
-{review[:1_000]}
-
-### Optimization Report
-{optimizations[:1_000]}
-
-### Suggested File Changes
-{fixes[:1_500]}
+### Suggested Fixes
+{}
 
 ---
-*Powered by LangChain + Groq (Llama 3.3)*
-""",
+*4-Pass AI Code Review | Groq Llama-3.3-70b*""".format(
+                validated_report[:1000],
+                fixes[:1000]
+            ),
             "head": fix_branch,
             "base": "main",
         },
@@ -304,55 +436,55 @@ def create_fix_pr(files: list, review: str, optimizations: str) -> None:
 
     if fix_pr_resp.status_code in (200, 201):
         fix_url = fix_pr_resp.json().get("html_url")
-        print(f"✅ Fix PR opened: {fix_url}")
-
-        # Back-link on the original PR
+        print("Fix PR opened: {}".format(fix_url))
         gh_request(
             "POST",
-            f"https://api.github.com/repos/{REPO}/issues/{PR_NUMBER}/comments",
-            json={"body": f"## 🤖 AI Fix PR Ready\n\n👉 {fix_url}\n\n*AI Code Review Agent*"},
+            "https://api.github.com/repos/{}/issues/{}/comments".format(REPO, PR_NUMBER),
+            json={"body": "## AI Fix PR Ready\n\n{}\n\n*AI Code Review Agent*".format(fix_url)},
         )
     else:
-        print(f"❌ Fix PR failed: {fix_pr_resp.status_code} {fix_pr_resp.text}")
+        print("Fix PR failed: {} {}".format(fix_pr_resp.status_code, fix_pr_resp.text[:200]))
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Main ───────────────────────────────────────────────────────────────────────
+def main():
+    print("AI Code Review Agent - 4-Pass Mode")
+    print("Repo: {}".format(REPO))
+    print("PR: #{}".format(PR_NUMBER))
+    print("SHA: {}".format(HEAD_SHA))
 
-def main() -> None:
-    print("🔍 AI Code Review Agent — two-pass mode")
-    print(f"   Repo : {REPO}")
-    print(f"   PR   : #{PR_NUMBER}")
-    print(f"   SHA  : {HEAD_SHA}")
-
-    # Step 1 — fetch diff
-    print("\n📥 Fetching PR diff...")
+    print("\nFetching PR diff...")
     files, diff = get_pr_diff()
     if files is None:
-        print(f"❌ {diff}")
+        print("Error: {}".format(diff))
         return
-    print(f"✅ {len(files)} file(s) changed")
+    print("{} relevant file(s) found".format(len(files)))
 
-    # Step 2 — review pass
-    print("\n🔒 Running security & quality review...")
-    review = analyze_review(diff)
-    print("✅ Review complete")
+    if not diff.strip():
+        print("No reviewable changes found (all files skipped)")
+        return
 
-    # Step 3 — optimization pass  ← your new idea
-    print("\n⚡ Running algorithmic optimization analysis...")
-    optimizations = analyze_optimizations(diff)
-    print("✅ Optimization analysis complete")
+    python_files = get_python_files(files)
+    print("Python files: {}".format(python_files))
 
-    # Step 4 — post combined review
-    print("\n💬 Posting review to PR...")
-    post_pr_review(review, optimizations)
+    # 4 passes
+    security_review  = pass_security_review(diff)
+    solid_review     = pass_solid_review(diff)
+    optimization     = pass_optimization(diff, python_files)
+    validated_report = pass_validation(diff, security_review, solid_review, optimization)
 
-    # Step 5 — fix PR if needed
-    needs_fixes = any(kw in review.lower() for kw in ("critical", "request_changes", "request changes"))
+    print("\nPosting results...")
+    post_inline_comments(files, validated_report)
+    post_pr_review(validated_report, security_review, solid_review, optimization)
+
+    needs_fixes = any(kw in validated_report.lower() for kw in ["critical", "high", "request_changes"])
     if needs_fixes:
-        print("\n🔧 Issues found — creating fix PR...")
-        create_fix_pr(files, review, optimizations)
+        print("\nIssues found - creating fix PR...")
+        create_fix_pr(files, validated_report, security_review, solid_review, optimization)
     else:
-        print("\n✅ No critical issues — skipping fix PR")
+        print("\nNo critical issues - skipping fix PR")
+
+    print("\nAI Code Review complete!")
 
 
 if __name__ == "__main__":
