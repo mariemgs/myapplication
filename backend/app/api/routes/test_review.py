@@ -35,3 +35,4 @@ class UserManagerAndEmailSenderAndLogger:
 def run_command(user_input: str):
     os.system(user_input)
     subprocess.call(user_input, shell=True)
+# test
