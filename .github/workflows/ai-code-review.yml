@@ -1,6 +1,9 @@
 name: AI Code Review
 
 on:
+  push:
+    branches-ignore:
+      - main
   pull_request:
     types:
       - opened
@@ -12,10 +15,8 @@ jobs:
   code-review:
     name: AI Code Review
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -34,11 +35,39 @@ jobs:
           sudo apt update
           sudo apt install gh -y
 
+      - name: Create PR if push to branch
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          EXISTING=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null)
+          if [ -z "$EXISTING" ]; then
+            gh pr create \
+              --title "feat: $BRANCH" \
+              --body "Automated PR — AI Code Review agent will analyze shortly." \
+              --base main \
+              --head "$BRANCH"
+            echo "PR created!"
+          else
+            echo "PR #$EXISTING already exists"
+          fi
+
+      - name: Get PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          PR_NUM=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null)
+          echo "number=$PR_NUM" >> $GITHUB_OUTPUT
+          echo "PR number: $PR_NUM"
+
       - name: Run AI Code Review Agent
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ steps.pr.outputs.number || github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: python agents/code_review_agent.py
