@@ -269,7 +269,7 @@ jobs:
         uses: bridgecrewio/checkov-action@master
         with:
           directory: .
-          framework: dockerfile,docker_compose
+          framework: dockerfile
           soft_fail: true
           output_format: sarif
           output_file_path: checkov-report.sarif
