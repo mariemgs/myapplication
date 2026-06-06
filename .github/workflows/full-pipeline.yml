@@ -362,6 +362,8 @@ jobs:
     name: 🌐 DAST - OWASP ZAP
     runs-on: ubuntu-latest
     needs: tests
+    permissions:
+      issues: write
     if: always()
     steps:
       - uses: actions/checkout@v4
