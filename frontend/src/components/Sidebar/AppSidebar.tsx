@@ -1,7 +1,6 @@
 import { Briefcase, Home, Users } from "lucide-react"
 
 import { SidebarAppearance } from "@/components/Common/Appearance"
-import { Logo } from "@/components/Common/Logo"
 import {
   Sidebar,
   SidebarContent,
@@ -27,7 +26,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-4 py-6 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:items-center">
-        <Logo variant="responsive" />
+        {/* <Logo variant="responsive" /> */}
       </SidebarHeader>
       <SidebarContent>
         <Main items={items} />

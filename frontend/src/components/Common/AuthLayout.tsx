@@ -1,6 +1,5 @@
 import { Appearance } from "@/components/Common/Appearance"
 import { Logo } from "@/components/Common/Logo"
-import { Footer } from "./Footer"
 
 interface AuthLayoutProps {
   children: React.ReactNode
@@ -19,7 +18,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         <div className="flex flex-1 items-center justify-center">
           <div className="w-full max-w-xs">{children}</div>
         </div>
-        <Footer />
+        {/* <Footer /> */}
       </div>
     </div>
   )
