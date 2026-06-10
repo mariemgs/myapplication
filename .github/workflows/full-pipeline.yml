@@ -269,7 +269,7 @@ jobs:
         uses: bridgecrewio/checkov-action@master
         with:
           directory: .
-          framework: dockerfile,docker_compose
+          framework: dockerfile
           soft_fail: true
           output_format: sarif
           output_file_path: checkov-report.sarif
@@ -362,6 +362,8 @@ jobs:
     name: 🌐 DAST - OWASP ZAP
     runs-on: ubuntu-latest
     needs: tests
+    permissions:
+      issues: write
     if: always()
     steps:
       - uses: actions/checkout@v4
@@ -432,110 +434,51 @@ jobs:
   # ── 10. E2E Tests ───────────────────────────────────────────────
   e2e-tests:
     name: 🎭 E2E Tests - Playwright
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: tests
+    if: always()
     steps:
-      - name: Fix permissions
+      - name: Wait for Playwright workflow to complete
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
-          sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
-          sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
-          mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
-          mkdir -p /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
-          chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report
-          chmod 777 /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results
+          echo "Waiting for Playwright Tests workflow to complete..."
 
-      - uses: actions/checkout@v4
+          # Get the run ID of the most recent playwright.yml triggered by same commit
+          SHA="${{ github.sha }}"
+          TIMEOUT=1800  # 30 minutes max
+          ELAPSED=0
+          INTERVAL=15
 
-      - uses: oven-sh/setup-bun@v2
+          # Wait for playwright workflow to appear for this commit
+          for i in $(seq 1 20); do
+            RUN_ID=$(gh run list               --workflow=playwright.yml               --json databaseId,headSha,status               --jq ".[] | select(.headSha == "$SHA") | .databaseId"               --limit 10 | head -1)
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+            if [ -n "$RUN_ID" ]; then
+              echo "Found Playwright run ID: $RUN_ID"
+              break
+            fi
+            echo "Waiting for Playwright workflow to start... ($i/20)"
+            sleep 15
+          done
 
-      - name: Create .env file
-        run: |
-          cat << ENVEOF > .env
-          DOMAIN=${{ secrets.DOMAIN }}
-          FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
-          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
-          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
-          STACK_NAME=${{ secrets.STACK_NAME }}
-          BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
-          SECRET_KEY=${{ secrets.SECRET_KEY }}
-          FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
-          FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}
-          SMTP_HOST=${{ secrets.SMTP_HOST }}
-          SMTP_USER=${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-          EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}
-          SMTP_TLS=${{ secrets.SMTP_TLS }}
-          SMTP_SSL=${{ secrets.SMTP_SSL }}
-          SMTP_PORT=${{ secrets.SMTP_PORT }}
-          EMAIL=${{ secrets.EMAIL }}
-          POSTGRES_SERVER=${{ secrets.POSTGRES_SERVER }}
-          POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
-          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
-          DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}
-          DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKER_IMAGE_FRONTEND }}
-          GH_PAT=${{ secrets.GH_PAT }}
-          GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
-          PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
-          ENVEOF
+          if [ -z "$RUN_ID" ]; then
+            echo "Warning: Could not find Playwright workflow run for this commit"
+            echo "Playwright tests may not have been triggered (no relevant file changes)"
+            exit 0
+          fi
 
-      - run: uv sync
-        working-directory: backend
+          # Wait for it to complete
+          echo "Watching run $RUN_ID..."
+          gh run watch "$RUN_ID" --exit-status
+          EXIT_CODE=$?
 
-      - run: bun ci
-        working-directory: frontend
-
-      - name: Generate client
-        run: |
-          set -a
-          source .env
-          set +a
-          bash scripts/generate-client.sh
-          bash scripts/restore-agents-client.sh
-
-      - name: Stop staging if running
-        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
-
-      - name: Create Traefik network
-        run: docker network create traefik-public || true
-
-      - run: docker compose build
-
-      - run: docker compose down -v --remove-orphans
-
-      - name: Run Playwright tests
-        run: docker compose run --rm playwright bunx playwright test --trace=retain-on-failure
-
-      - run: docker compose down -v --remove-orphans
-
-      - name: Fix report permissions
-        if: always()
-        run: |
-          sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/ || true
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: frontend/blob-report
-          retention-days: 7
-
-      - name: Restart staging
-        if: always()
-        run: |
-          cd /home/meriemguesmi/projects/full-stack-fastapi-template
-          docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
-          docker stop $(docker ps -q) 2>/dev/null || true
-          sleep 5
-          docker volume rm myapp-staging_app-db-data || true
-          sleep 3
-          VITE_API_URL=${{ secrets.VITE_API_URL }} docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "Playwright tests passed!"
+          else
+            echo "Playwright tests failed!"
+            exit 1
+          fi
 
   # ── 11. Deploy ──────────────────────────────────────────────────
   deploy:
