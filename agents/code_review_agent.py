@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import base64
 import subprocess
 import requests
@@ -78,6 +79,34 @@ def get_python_files(files):
         if f["filename"].endswith(".py")
         and not any(p in f["filename"] for p in SKIP_PATTERNS)
     ]
+
+
+def count_issues(text):
+    """Count number of issues/findings in a review text."""
+    count = 0
+    for line in text.split("\n"):
+        line = line.strip()
+        # Count lines that look like findings
+        if any(marker in line for marker in ["- [", "- **", "* [", "* **", "FILE:", "CRITICAL", "HIGH", "MEDIUM", "LOW", "WARNING"]):
+            count += 1
+        # Count numbered items
+        if line and line[0].isdigit() and "." in line[:3]:
+            count += 1
+    return max(count, text.lower().count("issue") + text.lower().count("violation") + text.lower().count("finding"))
+
+
+def count_hallucinated(validated_report):
+    """Count issues removed as hallucinated in Pass 4."""
+    count = 0
+    in_hallucinated_section = False
+    for line in validated_report.split("\n"):
+        if "Removed" in line and "Hallucinated" in line:
+            in_hallucinated_section = True
+        elif line.startswith("##"):
+            in_hallucinated_section = False
+        elif in_hallucinated_section and line.strip().startswith("-"):
+            count += 1
+    return count
 
 
 def pass_security_review(diff):
@@ -221,7 +250,7 @@ def post_inline_comments(files, validated_report):
         comments = json.loads(response.strip())
     except Exception as e:
         print("Could not parse inline comments: {}".format(e))
-        return
+        return 0
 
     valid_paths = {f["filename"] for f in files}
     posted = 0
@@ -246,9 +275,10 @@ def post_inline_comments(files, validated_report):
             print("Inline comment failed: {} - {}".format(resp.status_code, resp.text[:100]))
 
     print("Posted {} inline comments".format(posted))
+    return posted
 
 
-def post_pr_review(validated_report, security_review, solid_review, optimization):
+def post_pr_review(validated_report, security_review, solid_review, optimization, metrics):
     verdict = "COMMENT"
     lower = validated_report.lower()
     if "critical" in lower or "high" in lower:
@@ -256,10 +286,44 @@ def post_pr_review(validated_report, security_review, solid_review, optimization
     elif "no issues" in lower or "no violations" in lower:
         verdict = "APPROVE"
 
+    # Format metrics summary for the PR comment
+    metrics_summary = (
+        "### AI Review Metrics\n\n"
+        "| Metric | Value |\n"
+        "|--------|-------|\n"
+        "| Files reviewed | {} |\n"
+        "| Python files | {} |\n"
+        "| Pass 1 - Security findings | {} |\n"
+        "| Pass 2 - SOLID violations | {} |\n"
+        "| Pass 3 - Optimization suggestions | {} |\n"
+        "| **Total raw findings** | **{}** |\n"
+        "| Pass 4 - Hallucinated (removed) | {} |\n"
+        "| **Validated findings** | **{}** |\n"
+        "| **Hallucination rate** | **{:.1f}%** |\n"
+        "| Inline comments posted | {} |\n"
+        "| Duration | {:.1f}s |\n"
+        "| Verdict | {} |\n"
+    ).format(
+        metrics["files_reviewed"],
+        metrics["python_files"],
+        metrics["pass1_findings"],
+        metrics["pass2_findings"],
+        metrics["pass3_findings"],
+        metrics["total_raw"],
+        metrics["hallucinated"],
+        metrics["validated"],
+        metrics["hallucination_rate"],
+        metrics["inline_comments"],
+        metrics["duration"],
+        verdict
+    )
+
     body = (
         "## AI Code Review Report\n\n"
         "> Validated report - hallucinated findings removed. "
         "Only issues found in the actual diff are reported.\n\n"
+        "---\n\n"
+        "{}\n\n"
         "---\n\n"
         "{}\n\n"
         "---\n\n"
@@ -270,7 +334,13 @@ def post_pr_review(validated_report, security_review, solid_review, optimization
         "---\n"
         "*4-Pass AI Code Review: Security -> SOLID -> Optimization -> Validation*\n"
         "*Powered by Groq (Llama-3.3-70b) | Hallucination filter applied*"
-    ).format(validated_report, security_review[:1500], solid_review[:1500], optimization[:1500])
+    ).format(
+        validated_report,
+        metrics_summary,
+        security_review[:1500],
+        solid_review[:1500],
+        optimization[:1500]
+    )
 
     url  = "https://api.github.com/repos/{}/pulls/{}/reviews".format(REPO, PR_NUMBER)
     resp = gh_request("POST", url, json={
@@ -358,107 +428,9 @@ def create_fix_pr_with_gh(validated_report, security_review, solid_review, optim
         print("gh pr create failed: {}".format(result.stderr[:200]))
 
 
-def create_fix_pr(files, validated_report, security_review, solid_review, optimization):
-    print("Generating fix suggestions...")
-
-    python_files = get_python_files(files)
-    if not python_files:
-        print("No Python files to fix")
-        return
-
-    messages = [
-        SystemMessage(content="You are an expert Python developer. Provide concrete fix suggestions based only on validated issues."),
-        HumanMessage(content=(
-            "Based on these VALIDATED issues (hallucinations already removed):\n{}\n\n"
-            "For each file that needs changes: {}\n\n"
-            "Provide specific fix suggestions with:\n"
-            "- The exact problematic code\n"
-            "- The fixed version\n"
-            "- Why this fix addresses the issue\n\n"
-            "Only suggest fixes for issues that appear in the validated report."
-        ).format(validated_report[:2000], python_files))
-    ]
-
-    try:
-        fixes = llm.invoke(messages).content
-    except Exception as e:
-        fixes = "Could not generate fixes: {}".format(e)
-
-    pr_resp = gh_request("GET", "https://api.github.com/repos/{}/pulls/{}".format(REPO, PR_NUMBER))
-    if pr_resp.status_code != 200:
-        print("Could not fetch PR metadata")
-        return
-
-    base_sha   = pr_resp.json()["head"]["sha"]
-    fix_branch = "ai-fixes/pr-{}".format(PR_NUMBER)
-
-    ref_url = "https://api.github.com/repos/{}/git/refs/heads/{}".format(REPO, fix_branch)
-    if gh_request("GET", ref_url).status_code == 200:
-        gh_request("DELETE", ref_url)
-
-    br_resp = gh_request("POST", "https://api.github.com/repos/{}/git/refs".format(REPO), json={
-        "ref": "refs/heads/{}".format(fix_branch),
-        "sha": base_sha,
-    })
-    if br_resp.status_code not in (200, 201):
-        print("Could not create branch: {}".format(br_resp.status_code))
-        return
-
-    summary = (
-        "# AI Fix Suggestions for PR #{}\n\n"
-        "## Validated Issues Found\n{}\n\n"
-        "## Suggested Fixes\n{}\n\n"
-        "---\n"
-        "*Generated by 4-Pass AI Code Review Agent*\n"
-        "*All issues validated against actual diff - hallucinations removed*\n"
-    ).format(PR_NUMBER, validated_report[:2000], fixes[:2000])
-
-    file_resp = gh_request(
-        "PUT",
-        "https://api.github.com/repos/{}/contents/ai-review/pr-{}-fixes.md".format(REPO, PR_NUMBER),
-        json={
-            "message": "AI fix suggestions for PR #{}".format(PR_NUMBER),
-            "content": base64.b64encode(summary.encode()).decode(),
-            "branch": fix_branch,
-        },
-    )
-
-    if file_resp.status_code not in (200, 201):
-        print("Could not commit fix file: {}".format(file_resp.status_code))
-        return
-
-    fix_pr_resp = gh_request(
-        "POST",
-        "https://api.github.com/repos/{}/pulls".format(REPO),
-        json={
-            "title": "AI Fix Suggestions for PR #{}".format(PR_NUMBER),
-            "body": (
-                "## AI-Generated Fix Suggestions\n\n"
-                "> Human review required before merging.\n"
-                "> All suggestions were validated - hallucinated issues removed.\n\n"
-                "### Validated Issues\n{}\n\n"
-                "### Suggested Fixes\n{}\n\n"
-                "---\n"
-                "*4-Pass AI Code Review | Groq Llama-3.3-70b*"
-            ).format(validated_report[:1000], fixes[:1000]),
-            "head": fix_branch,
-            "base": "main",
-        },
-    )
-
-    if fix_pr_resp.status_code in (200, 201):
-        fix_url = fix_pr_resp.json().get("html_url")
-        print("Fix PR opened: {}".format(fix_url))
-        gh_request(
-            "POST",
-            "https://api.github.com/repos/{}/issues/{}/comments".format(REPO, PR_NUMBER),
-            json={"body": "## AI Fix PR Ready\n\n{}\n\n*AI Code Review Agent*".format(fix_url)},
-        )
-    else:
-        print("Fix PR failed: {} {}".format(fix_pr_resp.status_code, fix_pr_resp.text[:200]))
-
-
 def main():
+    start_time = time.time()
+
     print("AI Code Review Agent - 4-Pass Mode")
     print("Repo: {}".format(REPO))
     print("PR: #{}".format(PR_NUMBER))
@@ -478,14 +450,41 @@ def main():
     python_files = get_python_files(files)
     print("Python files: {}".format(python_files))
 
+    # Run 4 passes
     security_review  = pass_security_review(diff)
     solid_review     = pass_solid_review(diff)
     optimization     = pass_optimization(diff, python_files)
     validated_report = pass_validation(diff, security_review, solid_review, optimization)
 
+    # Calculate metrics
+    pass1_count   = count_issues(security_review)
+    pass2_count   = count_issues(solid_review)
+    pass3_count   = count_issues(optimization)
+    total_raw     = pass1_count + pass2_count + pass3_count
+    hallucinated  = count_hallucinated(validated_report)
+    validated     = max(0, total_raw - hallucinated)
+    halluc_rate   = (hallucinated / total_raw * 100) if total_raw > 0 else 0.0
+
     print("\nPosting results...")
-    post_inline_comments(files, validated_report)
-    post_pr_review(validated_report, security_review, solid_review, optimization)
+    inline_count = post_inline_comments(files, validated_report)
+
+    duration = time.time() - start_time
+
+    metrics = {
+        "files_reviewed": len([f for f in files if not any(p in f["filename"] for p in SKIP_PATTERNS)]),
+        "python_files": len(python_files),
+        "pass1_findings": pass1_count,
+        "pass2_findings": pass2_count,
+        "pass3_findings": pass3_count,
+        "total_raw": total_raw,
+        "hallucinated": hallucinated,
+        "validated": validated,
+        "hallucination_rate": halluc_rate,
+        "inline_comments": inline_count,
+        "duration": duration,
+    }
+
+    post_pr_review(validated_report, security_review, solid_review, optimization, metrics)
 
     needs_fixes = any(kw in validated_report.lower() for kw in ["critical", "high", "request_changes"])
     if needs_fixes:
@@ -494,6 +493,23 @@ def main():
     else:
         print("\nNo critical issues - skipping fix PR")
 
+    # Print metrics summary to logs
+    print("\n" + "="*50)
+    print("AI CODE REVIEW METRICS")
+    print("="*50)
+    print("PR: #{}".format(PR_NUMBER))
+    print("Files reviewed: {}".format(metrics["files_reviewed"]))
+    print("Python files: {}".format(metrics["python_files"]))
+    print("Pass 1 (Security) findings: {}".format(metrics["pass1_findings"]))
+    print("Pass 2 (SOLID) findings: {}".format(metrics["pass2_findings"]))
+    print("Pass 3 (Optimization) findings: {}".format(metrics["pass3_findings"]))
+    print("Total raw findings: {}".format(metrics["total_raw"]))
+    print("Hallucinated (removed by Pass 4): {}".format(metrics["hallucinated"]))
+    print("Validated findings: {}".format(metrics["validated"]))
+    print("Hallucination rate: {:.1f}%".format(metrics["hallucination_rate"]))
+    print("Inline comments posted: {}".format(metrics["inline_comments"]))
+    print("Duration: {:.1f}s".format(metrics["duration"]))
+    print("="*50)
     print("\nAI Code Review complete!")
 
 
