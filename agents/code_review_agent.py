@@ -7,13 +7,12 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
 
 GITHUB_TOKEN = os.environ.get("GH_PAT")
-REPO = os.environ.get("GITHUB_REPOSITORY")
-PR_NUMBER = os.environ.get("PR_NUMBER")
-HEAD_SHA = os.environ.get("HEAD_SHA")
+REPO         = os.environ.get("GITHUB_REPOSITORY")
+PR_NUMBER    = os.environ.get("PR_NUMBER")
+HEAD_SHA     = os.environ.get("HEAD_SHA")
 
-MAX_DIFF_CHARS = 12000
-MAX_ANALYSIS_CHARS = 4000
-MAX_RETRIES = 3
+MAX_DIFF_CHARS     = 12000
+MAX_RETRIES        = 3
 
 llm = ChatGroq(
     model="llama-3.3-70b-versatile",
@@ -44,14 +43,14 @@ def gh_request(method, url, **kwargs):
 
 
 def get_pr_diff():
-    url = "https://api.github.com/repos/{}/pulls/{}/files".format(REPO, PR_NUMBER)
+    url  = "https://api.github.com/repos/{}/pulls/{}/files".format(REPO, PR_NUMBER)
     resp = gh_request("GET", url)
     if resp.status_code != 200:
         return None, "Could not fetch PR files: {}".format(resp.status_code)
 
-    files = resp.json()
+    files      = resp.json()
     diff_parts = []
-    total = 0
+    total      = 0
 
     for f in files:
         filename = f.get("filename", "")
@@ -74,26 +73,30 @@ def get_pr_diff():
 
 
 def get_python_files(files):
-    return [f["filename"] for f in files if f["filename"].endswith(".py")
-            and not any(p in f["filename"] for p in SKIP_PATTERNS)]
+    return [
+        f["filename"] for f in files
+        if f["filename"].endswith(".py")
+        and not any(p in f["filename"] for p in SKIP_PATTERNS)
+    ]
 
 
 def pass_security_review(diff):
     print("Pass 1: Security and quality review...")
+    system = (
+        "You are a security-focused code reviewer.\n"
+        "CRITICAL RULES:\n"
+        "- Only report issues you can PROVE exist in the diff with exact file name and line number\n"
+        "- Do NOT invent issues. If you cannot cite exact evidence from the diff, do not report it\n"
+        "- Reference the actual code from the diff when describing issues\n"
+        "- Format each issue as: FILE:LINE_NUMBER - SEVERITY - description\n\n"
+        "Check for:\n"
+        "- Security vulnerabilities (OWASP Top 10, injection, secrets in code)\n"
+        "- Error handling gaps\n"
+        "- FastAPI best practices\n"
+        "- Missing input validation"
+    )
     messages = [
-        SystemMessage(content=(
-            "You are a security-focused code reviewer.\n"
-            "CRITICAL RULES:\n"
-            "- Only report issues you can PROVE exist in the diff with exact file name and line number\n"
-            "- Do NOT invent issues. If you cannot cite exact evidence from the diff, do not report it\n"
-            "- Reference the actual code from the diff when describing issues\n"
-            "- Format each issue as: FILE:LINE_NUMBER - SEVERITY - description\n\n"
-            "Check for:\n"
-            "- Security vulnerabilities (OWASP Top 10, injection, secrets in code)\n"
-            "- Error handling gaps\n"
-            "- FastAPI best practices\n"
-            "- Missing input validation"
-        )),
+        SystemMessage(content=system),
         HumanMessage(content="Review this diff:\n\n{}".format(diff))
     ]
     try:
@@ -104,21 +107,22 @@ def pass_security_review(diff):
 
 def pass_solid_review(diff):
     print("Pass 2: SOLID principles review...")
+    system = (
+        "You are a software architecture expert reviewing for SOLID principles.\n"
+        "CRITICAL RULES:\n"
+        "- Only flag violations you can point to with exact file name and line number from the diff\n"
+        "- Do NOT invent violations. Cite exact code snippets from the diff as evidence\n"
+        "- If the diff is too small to evaluate a principle, say so explicitly\n\n"
+        "Check for:\n"
+        "- S: Single Responsibility - does each class/function do one thing?\n"
+        "- O: Open/Closed - is code open for extension but closed for modification?\n"
+        "- L: Liskov Substitution - are subtypes substitutable?\n"
+        "- I: Interface Segregation - are interfaces too large?\n"
+        "- D: Dependency Inversion - does code depend on abstractions?\n\n"
+        "Also check: DRY, KISS, clean code naming conventions"
+    )
     messages = [
-        SystemMessage(content=(
-            "You are a software architecture expert reviewing for SOLID principles.\n"
-            "CRITICAL RULES:\n"
-            "- Only flag violations you can point to with exact file name and line number from the diff\n"
-            "- Do NOT invent violations. Cite exact code snippets from the diff as evidence\n"
-            "- If the diff is too small to evaluate a principle, say so explicitly\n\n"
-            "Check for:\n"
-            "- S: Single Responsibility - does each class/function do one thing?\n"
-            "- O: Open/Closed - is code open for extension but closed for modification?\n"
-            "- L: Liskov Substitution - are subtypes substitutable?\n"
-            "- I: Interface Segregation - are interfaces too large?\n"
-            "- D: Dependency Inversion - does code depend on abstractions?\n\n"
-            "Also check: DRY, KISS, clean code naming conventions"
-        )),
+        SystemMessage(content=system),
         HumanMessage(content="Review this diff for SOLID violations:\n\n{}".format(diff))
     ]
     try:
@@ -131,20 +135,21 @@ def pass_optimization(diff, python_files):
     if not python_files:
         return "No Python files to optimize."
     print("Pass 3: Performance optimization review...")
+    system = (
+        "You are a Python performance expert.\n"
+        "CRITICAL RULES:\n"
+        "- Only suggest optimizations for code that actually exists in the diff\n"
+        "- Cite exact file name and line number for every suggestion\n"
+        "- Show the original code snippet and the optimized version\n\n"
+        "Check for:\n"
+        "- Time complexity issues (O(n^2) or worse)\n"
+        "- Unnecessary loops that could use list comprehensions\n"
+        "- Missing async/await for I/O operations\n"
+        "- N+1 query patterns\n"
+        "- Opportunities for caching with functools.lru_cache"
+    )
     messages = [
-        SystemMessage(content=(
-            "You are a Python performance expert.\n"
-            "CRITICAL RULES:\n"
-            "- Only suggest optimizations for code that actually exists in the diff\n"
-            "- Cite exact file name and line number for every suggestion\n"
-            "- Show the original code snippet and the optimized version\n\n"
-            "Check for:\n"
-            "- Time complexity issues (O(n^2) or worse)\n"
-            "- Unnecessary loops that could use list comprehensions\n"
-            "- Missing async/await for I/O operations\n"
-            "- N+1 query patterns\n"
-            "- Opportunities for caching with functools.lru_cache"
-        )),
+        SystemMessage(content=system),
         HumanMessage(content="Optimize this diff:\n\n{}".format(diff))
     ]
     try:
@@ -155,28 +160,30 @@ def pass_optimization(diff, python_files):
 
 def pass_validation(diff, security_review, solid_review, optimization):
     print("Pass 4: Validating findings (anti-hallucination)...")
+    system = (
+        "You are a strict fact-checker for code reviews.\n"
+        "Your job is to validate that every issue mentioned in the reviews actually exists in the diff.\n\n"
+        "For each issue found in the reviews:\n"
+        "1. Search for it in the diff\n"
+        "2. If you can find the exact code being referenced: mark as VALID\n"
+        "3. If you cannot find it in the diff: mark as HALLUCINATED and remove it\n\n"
+        "Return a clean validated report with only VALID findings.\n"
+        "Format:\n"
+        "## Validated Security Issues\n"
+        "## Validated SOLID Violations\n"
+        "## Validated Optimizations\n"
+        "## Removed (Hallucinated) Issues"
+    )
+    content = (
+        "DIFF:\n{}\n\n"
+        "SECURITY REVIEW:\n{}\n\n"
+        "SOLID REVIEW:\n{}\n\n"
+        "OPTIMIZATION:\n{}\n\n"
+        "Validate all findings against the diff."
+    ).format(diff, security_review[:2000], solid_review[:2000], optimization[:2000])
     messages = [
-        SystemMessage(content=(
-            "You are a strict fact-checker for code reviews.\n"
-            "Your job is to validate that every issue mentioned in the reviews actually exists in the diff.\n\n"
-            "For each issue found in the reviews:\n"
-            "1. Search for it in the diff\n"
-            "2. If you can find the exact code being referenced: mark as VALID\n"
-            "3. If you cannot find it in the diff: mark as HALLUCINATED and remove it\n\n"
-            "Return a clean validated report with only VALID findings.\n"
-            "Format:\n"
-            "## Validated Security Issues\n"
-            "## Validated SOLID Violations\n"
-            "## Validated Optimizations\n"
-            "## Removed (Hallucinated) Issues"
-        )),
-        HumanMessage(content=(
-            "DIFF:\n{}\n\n"
-            "SECURITY REVIEW:\n{}\n\n"
-            "SOLID REVIEW:\n{}\n\n"
-            "OPTIMIZATION:\n{}\n\n"
-            "Validate all findings against the diff."
-        ).format(diff, security_review[:2000], solid_review[:2000], optimization[:2000]))
+        SystemMessage(content=system),
+        HumanMessage(content=content)
     ]
     try:
         return llm.invoke(messages).content
@@ -186,20 +193,21 @@ def pass_validation(diff, security_review, solid_review, optimization):
 
 def post_inline_comments(files, validated_report):
     print("Posting inline comments...")
+    system = (
+        "Extract inline comments from this validated review report.\n"
+        "Return a JSON array only, no other text:\n"
+        "[\n"
+        "  {\n"
+        "    \"path\": \"exact/file/path.py\",\n"
+        "    \"line\": 42,\n"
+        "    \"body\": \"comment text\"\n"
+        "  }\n"
+        "]\n"
+        "Only include items where you have an exact file path and line number.\n"
+        "If you cannot extract structured comments, return an empty array: []"
+    )
     messages = [
-        SystemMessage(content=(
-            "Extract inline comments from this validated review report.\n"
-            "Return a JSON array only, no other text:\n"
-            "[\n"
-            "  {\n"
-            "    \"path\": \"exact/file/path.py\",\n"
-            "    \"line\": 42,\n"
-            "    \"body\": \"comment text\"\n"
-            "  }\n"
-            "]\n"
-            "Only include items where you have an exact file path and line number.\n"
-            "If you cannot extract structured comments, return an empty array: []"
-        )),
+        SystemMessage(content=system),
         HumanMessage(content=validated_report[:3000])
     ]
 
@@ -222,11 +230,9 @@ def post_inline_comments(files, validated_report):
         path = comment.get("path", "")
         line = comment.get("line")
         body = comment.get("body", "")
-
         if path not in valid_paths or not line or not body:
             continue
-
-        url = "https://api.github.com/repos/{}/pulls/{}/comments".format(REPO, PR_NUMBER)
+        url  = "https://api.github.com/repos/{}/pulls/{}/comments".format(REPO, PR_NUMBER)
         resp = gh_request("POST", url, json={
             "commit_id": HEAD_SHA,
             "path": path,
@@ -234,7 +240,6 @@ def post_inline_comments(files, validated_report):
             "body": "**AI Review:** {}".format(body),
             "side": "RIGHT"
         })
-
         if resp.status_code in (200, 201):
             posted += 1
         else:
@@ -253,30 +258,21 @@ def post_pr_review(validated_report, security_review, solid_review, optimization
 
     body = (
         "## AI Code Review Report\n\n"
-        "> This review was validated to remove hallucinated findings. "
+        "> Validated report - hallucinated findings removed. "
         "Only issues found in the actual diff are reported.\n\n"
         "---\n\n"
         "{}\n\n"
         "---\n\n"
         "### Raw Analysis Details\n\n"
-        "<details>\n"
-        "<summary>Security & Quality Review</summary>\n\n"
-        "{}\n\n"
-        "</details>\n\n"
-        "<details>\n"
-        "<summary>SOLID Principles Review</summary>\n\n"
-        "{}\n\n"
-        "</details>\n\n"
-        "<details>\n"
-        "<summary>Performance Optimization</summary>\n\n"
-        "{}\n\n"
-        "</details>\n\n"
+        "<details>\n<summary>Security and Quality Review</summary>\n\n{}\n\n</details>\n\n"
+        "<details>\n<summary>SOLID Principles Review</summary>\n\n{}\n\n</details>\n\n"
+        "<details>\n<summary>Performance Optimization</summary>\n\n{}\n\n</details>\n\n"
         "---\n"
         "*4-Pass AI Code Review: Security -> SOLID -> Optimization -> Validation*\n"
         "*Powered by Groq (Llama-3.3-70b) | Hallucination filter applied*"
     ).format(validated_report, security_review[:1500], solid_review[:1500], optimization[:1500])
 
-    url = "https://api.github.com/repos/{}/pulls/{}/reviews".format(REPO, PR_NUMBER)
+    url  = "https://api.github.com/repos/{}/pulls/{}/reviews".format(REPO, PR_NUMBER)
     resp = gh_request("POST", url, json={
         "commit_id": HEAD_SHA,
         "body": body,
@@ -302,8 +298,13 @@ def create_fix_pr_with_gh(validated_report, security_review, solid_review, optim
         "## Optimization\n{}\n\n"
         "---\n"
         "*Generated by 4-Pass AI Code Review Agent*\n"
-    ).format(PR_NUMBER, validated_report[:2000], security_review[:1000],
-             solid_review[:1000], optimization[:1000])
+    ).format(
+        PR_NUMBER,
+        validated_report[:2000],
+        security_review[:1000],
+        solid_review[:1000],
+        optimization[:1000]
+    )
 
     branch_name = "ai-fixes/pr-{}".format(PR_NUMBER)
     env = os.environ.copy()
@@ -357,6 +358,106 @@ def create_fix_pr_with_gh(validated_report, security_review, solid_review, optim
         print("gh pr create failed: {}".format(result.stderr[:200]))
 
 
+def create_fix_pr(files, validated_report, security_review, solid_review, optimization):
+    print("Generating fix suggestions...")
+
+    python_files = get_python_files(files)
+    if not python_files:
+        print("No Python files to fix")
+        return
+
+    messages = [
+        SystemMessage(content="You are an expert Python developer. Provide concrete fix suggestions based only on validated issues."),
+        HumanMessage(content=(
+            "Based on these VALIDATED issues (hallucinations already removed):\n{}\n\n"
+            "For each file that needs changes: {}\n\n"
+            "Provide specific fix suggestions with:\n"
+            "- The exact problematic code\n"
+            "- The fixed version\n"
+            "- Why this fix addresses the issue\n\n"
+            "Only suggest fixes for issues that appear in the validated report."
+        ).format(validated_report[:2000], python_files))
+    ]
+
+    try:
+        fixes = llm.invoke(messages).content
+    except Exception as e:
+        fixes = "Could not generate fixes: {}".format(e)
+
+    pr_resp = gh_request("GET", "https://api.github.com/repos/{}/pulls/{}".format(REPO, PR_NUMBER))
+    if pr_resp.status_code != 200:
+        print("Could not fetch PR metadata")
+        return
+
+    base_sha   = pr_resp.json()["head"]["sha"]
+    fix_branch = "ai-fixes/pr-{}".format(PR_NUMBER)
+
+    ref_url = "https://api.github.com/repos/{}/git/refs/heads/{}".format(REPO, fix_branch)
+    if gh_request("GET", ref_url).status_code == 200:
+        gh_request("DELETE", ref_url)
+
+    br_resp = gh_request("POST", "https://api.github.com/repos/{}/git/refs".format(REPO), json={
+        "ref": "refs/heads/{}".format(fix_branch),
+        "sha": base_sha,
+    })
+    if br_resp.status_code not in (200, 201):
+        print("Could not create branch: {}".format(br_resp.status_code))
+        return
+
+    summary = (
+        "# AI Fix Suggestions for PR #{}\n\n"
+        "## Validated Issues Found\n{}\n\n"
+        "## Suggested Fixes\n{}\n\n"
+        "---\n"
+        "*Generated by 4-Pass AI Code Review Agent*\n"
+        "*All issues validated against actual diff - hallucinations removed*\n"
+    ).format(PR_NUMBER, validated_report[:2000], fixes[:2000])
+
+    file_resp = gh_request(
+        "PUT",
+        "https://api.github.com/repos/{}/contents/ai-review/pr-{}-fixes.md".format(REPO, PR_NUMBER),
+        json={
+            "message": "AI fix suggestions for PR #{}".format(PR_NUMBER),
+            "content": base64.b64encode(summary.encode()).decode(),
+            "branch": fix_branch,
+        },
+    )
+
+    if file_resp.status_code not in (200, 201):
+        print("Could not commit fix file: {}".format(file_resp.status_code))
+        return
+
+    fix_pr_resp = gh_request(
+        "POST",
+        "https://api.github.com/repos/{}/pulls".format(REPO),
+        json={
+            "title": "AI Fix Suggestions for PR #{}".format(PR_NUMBER),
+            "body": (
+                "## AI-Generated Fix Suggestions\n\n"
+                "> Human review required before merging.\n"
+                "> All suggestions were validated - hallucinated issues removed.\n\n"
+                "### Validated Issues\n{}\n\n"
+                "### Suggested Fixes\n{}\n\n"
+                "---\n"
+                "*4-Pass AI Code Review | Groq Llama-3.3-70b*"
+            ).format(validated_report[:1000], fixes[:1000]),
+            "head": fix_branch,
+            "base": "main",
+        },
+    )
+
+    if fix_pr_resp.status_code in (200, 201):
+        fix_url = fix_pr_resp.json().get("html_url")
+        print("Fix PR opened: {}".format(fix_url))
+        gh_request(
+            "POST",
+            "https://api.github.com/repos/{}/issues/{}/comments".format(REPO, PR_NUMBER),
+            json={"body": "## AI Fix PR Ready\n\n{}\n\n*AI Code Review Agent*".format(fix_url)},
+        )
+    else:
+        print("Fix PR failed: {} {}".format(fix_pr_resp.status_code, fix_pr_resp.text[:200]))
+
+
 def main():
     print("AI Code Review Agent - 4-Pass Mode")
     print("Repo: {}".format(REPO))
@@ -377,9 +478,9 @@ def main():
     python_files = get_python_files(files)
     print("Python files: {}".format(python_files))
 
-    security_review = pass_security_review(diff)
-    solid_review = pass_solid_review(diff)
-    optimization = pass_optimization(diff, python_files)
+    security_review  = pass_security_review(diff)
+    solid_review     = pass_solid_review(diff)
+    optimization     = pass_optimization(diff, python_files)
     validated_report = pass_validation(diff, security_review, solid_review, optimization)
 
     print("\nPosting results...")
