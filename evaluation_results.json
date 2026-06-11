@@ -1,0 +1,541 @@
+{
+  "summary": {
+    "total_tests": 50,
+    "detected": 25,
+    "missed": 25,
+    "detection_rate": 50.0,
+    "total_raw_findings": 31,
+    "total_hallucinated": 9,
+    "hallucination_rate": 29.0,
+    "accuracy_after_filter": 71.0
+  },
+  "by_category": {
+    "Security": {
+      "detected": 10,
+      "total": 10,
+      "detection_rate": 100.0
+    },
+    "SOLID": {
+      "detected": 7,
+      "total": 10,
+      "detection_rate": 70.0
+    },
+    "Performance": {
+      "detected": 2,
+      "total": 10,
+      "detection_rate": 20.0
+    },
+    "FastAPI": {
+      "detected": 6,
+      "total": 10,
+      "detection_rate": 60.0
+    },
+    "Python": {
+      "detected": 0,
+      "total": 10,
+      "detection_rate": 0.0
+    }
+  },
+  "detailed_results": [
+    {
+      "id": "SEC-01",
+      "category": "Security",
+      "known_issue": "SQL Injection via string concatenation",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 5.2
+    },
+    {
+      "id": "SEC-02",
+      "category": "Security",
+      "known_issue": "Hardcoded credentials in source code",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 2.6
+    },
+    {
+      "id": "SEC-03",
+      "category": "Security",
+      "known_issue": "Command injection via os.system with user input",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 5.5
+    },
+    {
+      "id": "SEC-04",
+      "category": "Security",
+      "known_issue": "Missing authentication on sensitive delete endpoint",
+      "detected": true,
+      "raw_findings": 5,
+      "hallucinated": 5,
+      "validated": 0,
+      "duration": 5.8
+    },
+    {
+      "id": "SEC-05",
+      "category": "Security",
+      "known_issue": "Insecure random for security token generation",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 4.1
+    },
+    {
+      "id": "SEC-06",
+      "category": "Security",
+      "known_issue": "Path traversal in file upload",
+      "detected": true,
+      "raw_findings": 9,
+      "hallucinated": 0,
+      "validated": 9,
+      "duration": 6.6
+    },
+    {
+      "id": "SEC-07",
+      "category": "Security",
+      "known_issue": "Sensitive data exposed in logs",
+      "detected": true,
+      "raw_findings": 8,
+      "hallucinated": 4,
+      "validated": 4,
+      "duration": 5.1
+    },
+    {
+      "id": "SEC-08",
+      "category": "Security",
+      "known_issue": "JWT token without expiration",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 11.4
+    },
+    {
+      "id": "SEC-09",
+      "category": "Security",
+      "known_issue": "Mass assignment vulnerability",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 18.6
+    },
+    {
+      "id": "SEC-10",
+      "category": "Security",
+      "known_issue": "CORS misconfiguration - allow all origins",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 9.7
+    },
+    {
+      "id": "SOLID-01",
+      "category": "SOLID",
+      "known_issue": "SRP violation - God class with too many responsibilities",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 14.5
+    },
+    {
+      "id": "SOLID-02",
+      "category": "SOLID",
+      "known_issue": "OCP violation - if/elif for extensibility",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 15.6
+    },
+    {
+      "id": "SOLID-03",
+      "category": "SOLID",
+      "known_issue": "DIP violation - depending on concrete class",
+      "detected": true,
+      "raw_findings": 9,
+      "hallucinated": 0,
+      "validated": 9,
+      "duration": 14.4
+    },
+    {
+      "id": "SOLID-04",
+      "category": "SOLID",
+      "known_issue": "DRY violation - duplicated validation logic",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 15.3
+    },
+    {
+      "id": "SOLID-05",
+      "category": "SOLID",
+      "known_issue": "ISP violation - function with too many boolean flags",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 15.3
+    },
+    {
+      "id": "SOLID-06",
+      "category": "SOLID",
+      "known_issue": "LSP violation - subclass breaks parent contract",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 11.4
+    },
+    {
+      "id": "SOLID-07",
+      "category": "SOLID",
+      "known_issue": "KISS violation - over-engineered simple operation",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 6.4
+    },
+    {
+      "id": "SOLID-08",
+      "category": "SOLID",
+      "known_issue": "Missing abstraction - tight coupling to implementation",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 42.6
+    },
+    {
+      "id": "SOLID-09",
+      "category": "SOLID",
+      "known_issue": "Long method - too many lines, does too much",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.3
+    },
+    {
+      "id": "SOLID-10",
+      "category": "SOLID",
+      "known_issue": "Magic numbers without constants",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PERF-01",
+      "category": "Performance",
+      "known_issue": "O(n\u00b2) nested loop",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PERF-02",
+      "category": "Performance",
+      "known_issue": "N+1 database query problem",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PERF-03",
+      "category": "Performance",
+      "known_issue": "Blocking synchronous I/O in async FastAPI endpoint",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PERF-04",
+      "category": "Performance",
+      "known_issue": "Missing memoization on recursive function",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PERF-05",
+      "category": "Performance",
+      "known_issue": "Inefficient string concatenation in loop",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PERF-06",
+      "category": "Performance",
+      "known_issue": "Loading all records without pagination",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PERF-07",
+      "category": "Performance",
+      "known_issue": "Repeated dictionary lookup in loop",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PERF-08",
+      "category": "Performance",
+      "known_issue": "Using list when set would be more efficient for lookups",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PERF-09",
+      "category": "Performance",
+      "known_issue": "Unnecessary list comprehension creating intermediate list",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PERF-10",
+      "category": "Performance",
+      "known_issue": "Missing database index on frequently queried column",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "FASTAPI-01",
+      "category": "FastAPI",
+      "known_issue": "Missing response model - exposing internal fields",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "FASTAPI-02",
+      "category": "FastAPI",
+      "known_issue": "No HTTP status codes specified",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "FASTAPI-03",
+      "category": "FastAPI",
+      "known_issue": "No error handling for database operations",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "FASTAPI-04",
+      "category": "FastAPI",
+      "known_issue": "Missing input validation with Pydantic",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "FASTAPI-05",
+      "category": "FastAPI",
+      "known_issue": "Synchronous database operations without connection pooling",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "FASTAPI-06",
+      "category": "FastAPI",
+      "known_issue": "No rate limiting on authentication endpoint",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "FASTAPI-07",
+      "category": "FastAPI",
+      "known_issue": "Returning plain dict instead of Pydantic model",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "FASTAPI-08",
+      "category": "FastAPI",
+      "known_issue": "Missing dependency injection for settings",
+      "detected": true,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "FASTAPI-09",
+      "category": "FastAPI",
+      "known_issue": "No background task for long-running operations",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "FASTAPI-10",
+      "category": "FastAPI",
+      "known_issue": "Storing plain text password",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PY-01",
+      "category": "Python",
+      "known_issue": "Mutable default argument",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PY-02",
+      "category": "Python",
+      "known_issue": "Bare except catching all exceptions",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PY-03",
+      "category": "Python",
+      "known_issue": "Not using context manager for file operations",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PY-04",
+      "category": "Python",
+      "known_issue": "Using type() instead of isinstance()",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PY-05",
+      "category": "Python",
+      "known_issue": "Not using enumerate() in loop with index",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PY-06",
+      "category": "Python",
+      "known_issue": "String formatting with % operator instead of f-string",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PY-07",
+      "category": "Python",
+      "known_issue": "Missing type hints on function signatures",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.5
+    },
+    {
+      "id": "PY-08",
+      "category": "Python",
+      "known_issue": "Global variable mutation",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PY-09",
+      "category": "Python",
+      "known_issue": "Comparing to None with == instead of is",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    },
+    {
+      "id": "PY-10",
+      "category": "Python",
+      "known_issue": "Not using dataclass or Pydantic for data containers",
+      "detected": false,
+      "raw_findings": 0,
+      "hallucinated": 0,
+      "validated": 0,
+      "duration": 0.4
+    }
+  ]
+}
