@@ -271,16 +271,14 @@ jobs:
           directory: .
           framework: dockerfile
           soft_fail: true
-          output_format: sarif,html
-          output_file_path: checkov-report.sarif,checkov-report.html
+          output_format: sarif
+          output_file_path: checkov-report.sarif
         continue-on-error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: checkov-report
-          path: |
-            checkov-report.sarif
-            checkov-report.html
+          path: checkov-report.sarif
           retention-days: 7
 
   # ── 8. Code Quality ─────────────────────────────────────────────
