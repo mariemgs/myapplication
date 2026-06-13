@@ -175,6 +175,10 @@ jobs:
 
       - name: Build images
         run: docker compose build backend
+      - name: Download Trivy HTML template
+        run: |
+          mkdir -p contrib
+          curl -sL -o contrib/html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
 
       - name: Run Trivy
         uses: aquasecurity/trivy-action@master
