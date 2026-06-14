@@ -66,8 +66,6 @@ jobs:
       - name: Stop existing containers
         run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
 
-      - name: Remove old db volume
-        run: docker volume rm myapp-staging_app-db-data || true
 
       - name: Build
         run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging build
