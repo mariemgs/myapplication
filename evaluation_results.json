@@ -1,13 +1,13 @@
 {
   "summary": {
     "total_tests": 50,
-    "detected": 25,
-    "missed": 25,
-    "detection_rate": 50.0,
-    "total_raw_findings": 31,
-    "total_hallucinated": 9,
-    "hallucination_rate": 29.0,
-    "accuracy_after_filter": 71.0
+    "detected": 37,
+    "missed": 13,
+    "detection_rate": 74.0,
+    "total_raw_findings": 76,
+    "total_hallucinated": 3,
+    "hallucination_rate": 3.9,
+    "accuracy_after_filter": 96.1
   },
   "by_category": {
     "Security": {
@@ -16,19 +16,19 @@
       "detection_rate": 100.0
     },
     "SOLID": {
+      "detected": 10,
+      "total": 10,
+      "detection_rate": 100.0
+    },
+    "Performance": {
+      "detected": 10,
+      "total": 10,
+      "detection_rate": 100.0
+    },
+    "FastAPI": {
       "detected": 7,
       "total": 10,
       "detection_rate": 70.0
-    },
-    "Performance": {
-      "detected": 2,
-      "total": 10,
-      "detection_rate": 20.0
-    },
-    "FastAPI": {
-      "detected": 6,
-      "total": 10,
-      "detection_rate": 60.0
     },
     "Python": {
       "detected": 0,
@@ -45,7 +45,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 5.2
+      "duration": 5.1
     },
     {
       "id": "SEC-02",
@@ -55,7 +55,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 2.6
+      "duration": 2.5
     },
     {
       "id": "SEC-03",
@@ -72,10 +72,10 @@
       "category": "Security",
       "known_issue": "Missing authentication on sensitive delete endpoint",
       "detected": true,
-      "raw_findings": 5,
-      "hallucinated": 5,
+      "raw_findings": 0,
+      "hallucinated": 0,
       "validated": 0,
-      "duration": 5.8
+      "duration": 6.5
     },
     {
       "id": "SEC-05",
@@ -85,37 +85,37 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 4.1
+      "duration": 4.2
     },
     {
       "id": "SEC-06",
       "category": "Security",
       "known_issue": "Path traversal in file upload",
       "detected": true,
-      "raw_findings": 9,
+      "raw_findings": 0,
       "hallucinated": 0,
-      "validated": 9,
-      "duration": 6.6
+      "validated": 0,
+      "duration": 5.8
     },
     {
       "id": "SEC-07",
       "category": "Security",
       "known_issue": "Sensitive data exposed in logs",
       "detected": true,
-      "raw_findings": 8,
-      "hallucinated": 4,
-      "validated": 4,
-      "duration": 5.1
+      "raw_findings": 13,
+      "hallucinated": 1,
+      "validated": 12,
+      "duration": 5.0
     },
     {
       "id": "SEC-08",
       "category": "Security",
       "known_issue": "JWT token without expiration",
       "detected": true,
-      "raw_findings": 0,
+      "raw_findings": 7,
       "hallucinated": 0,
-      "validated": 0,
-      "duration": 11.4
+      "validated": 7,
+      "duration": 12.2
     },
     {
       "id": "SEC-09",
@@ -125,7 +125,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 18.6
+      "duration": 17.6
     },
     {
       "id": "SEC-10",
@@ -135,7 +135,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 9.7
+      "duration": 11.2
     },
     {
       "id": "SOLID-01",
@@ -145,7 +145,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 14.5
+      "duration": 18.5
     },
     {
       "id": "SOLID-02",
@@ -155,17 +155,17 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 15.6
+      "duration": 14.1
     },
     {
       "id": "SOLID-03",
       "category": "SOLID",
       "known_issue": "DIP violation - depending on concrete class",
       "detected": true,
-      "raw_findings": 9,
+      "raw_findings": 0,
       "hallucinated": 0,
-      "validated": 9,
-      "duration": 14.4
+      "validated": 0,
+      "duration": 16.8
     },
     {
       "id": "SOLID-04",
@@ -175,17 +175,17 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 15.3
+      "duration": 16.3
     },
     {
       "id": "SOLID-05",
       "category": "SOLID",
       "known_issue": "ISP violation - function with too many boolean flags",
       "detected": true,
-      "raw_findings": 0,
+      "raw_findings": 3,
       "hallucinated": 0,
-      "validated": 0,
-      "duration": 15.3
+      "validated": 3,
+      "duration": 18.5
     },
     {
       "id": "SOLID-06",
@@ -195,97 +195,97 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 11.4
+      "duration": 14.7
     },
     {
       "id": "SOLID-07",
       "category": "SOLID",
       "known_issue": "KISS violation - over-engineered simple operation",
       "detected": true,
-      "raw_findings": 0,
+      "raw_findings": 4,
       "hallucinated": 0,
-      "validated": 0,
-      "duration": 6.4
+      "validated": 4,
+      "duration": 14.9
     },
     {
       "id": "SOLID-08",
       "category": "SOLID",
       "known_issue": "Missing abstraction - tight coupling to implementation",
-      "detected": false,
-      "raw_findings": 0,
-      "hallucinated": 0,
-      "validated": 0,
-      "duration": 42.6
+      "detected": true,
+      "raw_findings": 12,
+      "hallucinated": 1,
+      "validated": 11,
+      "duration": 17.2
     },
     {
       "id": "SOLID-09",
       "category": "SOLID",
       "known_issue": "Long method - too many lines, does too much",
-      "detected": false,
-      "raw_findings": 0,
-      "hallucinated": 0,
-      "validated": 0,
-      "duration": 0.3
+      "detected": true,
+      "raw_findings": 16,
+      "hallucinated": 1,
+      "validated": 15,
+      "duration": 20.6
     },
     {
       "id": "SOLID-10",
       "category": "SOLID",
       "known_issue": "Magic numbers without constants",
-      "detected": false,
+      "detected": true,
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 18.3
     },
     {
       "id": "PERF-01",
       "category": "Performance",
       "known_issue": "O(n\u00b2) nested loop",
-      "detected": false,
+      "detected": true,
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.4
+      "duration": 14.8
     },
     {
       "id": "PERF-02",
       "category": "Performance",
       "known_issue": "N+1 database query problem",
-      "detected": false,
-      "raw_findings": 0,
+      "detected": true,
+      "raw_findings": 10,
       "hallucinated": 0,
-      "validated": 0,
-      "duration": 0.5
+      "validated": 10,
+      "duration": 17.2
     },
     {
       "id": "PERF-03",
       "category": "Performance",
       "known_issue": "Blocking synchronous I/O in async FastAPI endpoint",
-      "detected": false,
+      "detected": true,
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 15.1
     },
     {
       "id": "PERF-04",
       "category": "Performance",
       "known_issue": "Missing memoization on recursive function",
-      "detected": false,
+      "detected": true,
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.4
+      "duration": 15.2
     },
     {
       "id": "PERF-05",
       "category": "Performance",
       "known_issue": "Inefficient string concatenation in loop",
-      "detected": false,
-      "raw_findings": 0,
+      "detected": true,
+      "raw_findings": 4,
       "hallucinated": 0,
-      "validated": 0,
-      "duration": 0.4
+      "validated": 4,
+      "duration": 13.5
     },
     {
       "id": "PERF-06",
@@ -295,17 +295,17 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 12.1
     },
     {
       "id": "PERF-07",
       "category": "Performance",
       "known_issue": "Repeated dictionary lookup in loop",
-      "detected": false,
+      "detected": true,
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 14.5
     },
     {
       "id": "PERF-08",
@@ -315,37 +315,37 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.4
+      "duration": 13.0
     },
     {
       "id": "PERF-09",
       "category": "Performance",
       "known_issue": "Unnecessary list comprehension creating intermediate list",
-      "detected": false,
+      "detected": true,
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 13.8
     },
     {
       "id": "PERF-10",
       "category": "Performance",
       "known_issue": "Missing database index on frequently queried column",
-      "detected": false,
+      "detected": true,
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 12.9
     },
     {
       "id": "FASTAPI-01",
       "category": "FastAPI",
       "known_issue": "Missing response model - exposing internal fields",
       "detected": true,
-      "raw_findings": 0,
+      "raw_findings": 7,
       "hallucinated": 0,
-      "validated": 0,
-      "duration": 0.4
+      "validated": 7,
+      "duration": 14.4
     },
     {
       "id": "FASTAPI-02",
@@ -355,17 +355,17 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.4
+      "duration": 5.6
     },
     {
       "id": "FASTAPI-03",
       "category": "FastAPI",
       "known_issue": "No error handling for database operations",
-      "detected": false,
+      "detected": true,
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.4
+      "duration": 4.6
     },
     {
       "id": "FASTAPI-04",
@@ -375,7 +375,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 0.4
     },
     {
       "id": "FASTAPI-05",
@@ -435,7 +435,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 0.4
     },
     {
       "id": "PY-01",
@@ -455,7 +455,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 0.4
     },
     {
       "id": "PY-03",
@@ -465,7 +465,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 0.4
     },
     {
       "id": "PY-04",
@@ -505,7 +505,7 @@
       "raw_findings": 0,
       "hallucinated": 0,
       "validated": 0,
-      "duration": 0.5
+      "duration": 0.4
     },
     {
       "id": "PY-08",

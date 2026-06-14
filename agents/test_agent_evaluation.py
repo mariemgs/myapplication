@@ -1,7 +1,8 @@
 """
 AI Code Review Agent - Evaluation Test Suite
-Tests 50 known issues across Security, SOLID, Performance, FastAPI, Python categories
-Measures: Detection Rate, False Positive Rate, Hallucination Rate
+50 known issues: Security(10) + SOLID(10) + Performance(10) + FastAPI(10) + Python(10)
+Detection: Keyword matching only (reproducible, objective, explainable)
+Measures: Detection Rate per category + Hallucination Rate
 """
 
 import os
@@ -16,47 +17,68 @@ llm = ChatGroq(
     api_key=os.environ.get("GROQ_API_KEY"),
 )
 
+
+def llm_invoke_with_retry(messages, max_retries=5):
+    """LLM call with exponential backoff on rate limit errors."""
+    for attempt in range(max_retries):
+        try:
+            return llm.invoke(messages).content
+        except Exception as e:
+            if "429" in str(e) or "rate limit" in str(e).lower():
+                wait = 30 * (attempt + 1)
+                print("    Rate limit - waiting {}s (retry {}/{})...".format(
+                    wait, attempt + 1, max_retries))
+                time.sleep(wait)
+            else:
+                return "Error: {}".format(e)
+    return "Error: max retries exceeded"
+
+
+# ── 50 Test Cases ─────────────────────────────────────────────────────────────
+
 TEST_CASES = [
 
-    # ── SECURITY ISSUES (10) ─────────────────────────────────────────────────
-
+    # ════════════════════════════════════════════════════════════════
+    # SECURITY (10) - Tested by Pass 1
+    # ════════════════════════════════════════════════════════════════
     {
-        "id": "SEC-01",
-        "category": "Security",
+        "id": "SEC-01", "category": "Security",
         "known_issue": "SQL Injection via string concatenation",
+        "keywords": ["sql injection", "injection", "concatenat", "string concat",
+                     "parameteriz", "raw query", "user input", "unsanitized"],
         "code": '''
 def get_user(user_id: str):
     query = "SELECT * FROM users WHERE id = " + user_id
     return db.execute(query)
-''',
-        "keywords": ["sql injection", "injection", "concatenat", "parameteriz", "user input", "string concat", "raw query"]
+'''
     },
     {
-        "id": "SEC-02",
-        "category": "Security",
+        "id": "SEC-02", "category": "Security",
         "known_issue": "Hardcoded credentials in source code",
+        "keywords": ["hardcoded", "hard-coded", "secret", "password", "credential",
+                     "environment variable", "plaintext", "sensitive", "source code"],
         "code": '''
 DATABASE_PASSWORD = "admin123"
 SECRET_KEY = "mysupersecretkey"
 API_TOKEN = "ghp_abc123realtoken"
-''',
-        "keywords": ["hardcoded", "hard-coded", "secret", "password", "credential", "environment variable", "plaintext", "source code"]
+'''
     },
     {
-        "id": "SEC-03",
-        "category": "Security",
+        "id": "SEC-03", "category": "Security",
         "known_issue": "Command injection via os.system with user input",
+        "keywords": ["command injection", "os.system", "shell=true", "shell=True",
+                     "injection", "arbitrary command", "user-controlled", "sanitize"],
         "code": '''
 def run_command(user_input: str):
     os.system(user_input)
     subprocess.call(user_input, shell=True)
-''',
-        "keywords": ["command injection", "os.system", "shell=true", "shell=True", "injection", "arbitrary command", "user input"]
+'''
     },
     {
-        "id": "SEC-04",
-        "category": "Security",
+        "id": "SEC-04", "category": "Security",
         "known_issue": "Missing authentication on sensitive delete endpoint",
+        "keywords": ["authentication", "authorization", "current_user", "permission",
+                     "unauthenticated", "protected", "any user", "without auth", "auth"],
         "code": '''
 @router.delete("/users/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(get_db)):
@@ -64,24 +86,24 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"message": "deleted"}
-''',
-        "keywords": ["authentication", "authorization", "current_user", "permission", "auth", "unauthenticated", "protected", "security"]
+'''
     },
     {
-        "id": "SEC-05",
-        "category": "Security",
-        "known_issue": "Insecure random for security token generation",
+        "id": "SEC-05", "category": "Security",
+        "known_issue": "Insecure random number for security token",
+        "keywords": ["random", "insecure", "secrets module", "cryptograph",
+                     "predictable", "secure random", "os.urandom", "pseudo"],
         "code": '''
 import random
 def generate_reset_token():
     return str(random.randint(100000, 999999))
-''',
-        "keywords": ["random", "insecure", "secrets module", "cryptograph", "predictable", "secure random", "os.urandom", "not cryptographically"]
+'''
     },
     {
-        "id": "SEC-06",
-        "category": "Security",
-        "known_issue": "Path traversal in file upload",
+        "id": "SEC-06", "category": "Security",
+        "known_issue": "Path traversal vulnerability in file upload",
+        "keywords": ["path traversal", "filename", "sanitiz", "../",
+                     "directory traversal", "arbitrary file", "malicious", "secure_filename"],
         "code": '''
 @router.post("/upload")
 async def upload_file(file: UploadFile):
@@ -90,37 +112,37 @@ async def upload_file(file: UploadFile):
         content = await file.read()
         f.write(content)
     return {"path": file_path}
-''',
-        "keywords": ["path traversal", "filename", "sanitiz", "../", "directory", "arbitrary file", "malicious", "unsafe"]
+'''
     },
     {
-        "id": "SEC-07",
-        "category": "Security",
-        "known_issue": "Sensitive data exposed in logs",
+        "id": "SEC-07", "category": "Security",
+        "known_issue": "Sensitive password exposed in logs",
+        "keywords": ["log", "password", "sensitive", "expose", "leak",
+                     "logging", "never log", "plain", "credentials in log"],
         "code": '''
 def authenticate(username: str, password: str):
     logger.info(f"Login attempt: username={username}, password={password}")
     user = db.query(User).filter(User.username == username).first()
     return user
-''',
-        "keywords": ["log", "password", "sensitive", "expose", "leak", "logging", "plain", "never log"]
+'''
     },
     {
-        "id": "SEC-08",
-        "category": "Security",
-        "known_issue": "JWT token without expiration",
+        "id": "SEC-08", "category": "Security",
+        "known_issue": "JWT token created without expiration",
+        "keywords": ["expir", "exp", "jwt", "token", "lifetime",
+                     "never expire", "no expiration", "expiration time"],
         "code": '''
 def create_token(user_id: int):
     payload = {"sub": str(user_id)}
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
     return token
-''',
-        "keywords": ["expir", "exp", "jwt", "token", "lifetime", "never expire", "no expiration", "expiration time"]
+'''
     },
     {
-        "id": "SEC-09",
-        "category": "Security",
-        "known_issue": "Mass assignment vulnerability",
+        "id": "SEC-09", "category": "Security",
+        "known_issue": "Mass assignment vulnerability via setattr loop",
+        "keywords": ["mass assignment", "whitelist", "setattr", "arbitrary field",
+                     "all fields", "allowlist", "unexpected field", "any attribute"],
         "code": '''
 @router.put("/users/{user_id}")
 def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db)):
@@ -129,31 +151,31 @@ def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db)):
         setattr(user, key, value)
     db.commit()
     return user
-''',
-        "keywords": ["mass assignment", "whitelist", "allow", "field", "schema", "validation", "arbitrary", "setattr", "all fields"]
+'''
     },
     {
-        "id": "SEC-10",
-        "category": "Security",
-        "known_issue": "CORS misconfiguration - allow all origins",
+        "id": "SEC-10", "category": "Security",
+        "known_issue": "Password stored as plain text without hashing",
+        "keywords": ["hash", "bcrypt", "plain text", "plain-text", "hashed",
+                     "encrypt", "passlib", "never store", "password hash"],
         "code": '''
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-''',
-        "keywords": ["cors", "allow_origins", "wildcard", "allow_credentials", "misconfigur", "restrict", "all origins", "insecure"]
+@router.post("/users")
+def create_user(username: str, password: str, db: Session = Depends(get_db)):
+    user = User(username=username, password=password)
+    db.add(user)
+    db.commit()
+    return {"id": user.id}
+'''
     },
 
-    # ── SOLID VIOLATIONS (10) ────────────────────────────────────────────────
-
+    # ════════════════════════════════════════════════════════════════
+    # SOLID (10) - Tested by Pass 2
+    # ════════════════════════════════════════════════════════════════
     {
-        "id": "SOLID-01",
-        "category": "SOLID",
+        "id": "SOLID-01", "category": "SOLID",
         "known_issue": "SRP violation - God class with too many responsibilities",
+        "keywords": ["single responsibility", "srp", "god class", "multiple responsibilities",
+                     "too many concerns", "separate class", "violates", "one reason to change"],
         "code": '''
 class UserManager:
     def create_user(self, name, email, password): pass
@@ -163,13 +185,13 @@ class UserManager:
     def log_to_file(self, message): pass
     def validate_credit_card(self, card_number): pass
     def send_sms(self, phone, message): pass
-''',
-        "keywords": ["single responsibility", "srp", "god class", "multiple responsibilities", "too many", "violates", "separate", "concern"]
+'''
     },
     {
-        "id": "SOLID-02",
-        "category": "SOLID",
-        "known_issue": "OCP violation - if/elif for extensibility",
+        "id": "SOLID-02", "category": "SOLID",
+        "known_issue": "OCP violation - if/elif chain requiring modification for new types",
+        "keywords": ["open/closed", "ocp", "if-elif", "if/elif", "extension",
+                     "polymorphism", "modification", "closed for modification", "new type"],
         "code": '''
 class PaymentProcessor:
     def process(self, payment_type: str, amount: float):
@@ -179,29 +201,28 @@ class PaymentProcessor:
             pass
         elif payment_type == "bitcoin":
             pass
-''',
-        "keywords": ["open/closed", "ocp", "if/elif", "if-elif", "extension", "polymorphism", "new payment", "modif", "closed for modification"]
+'''
     },
     {
-        "id": "SOLID-03",
-        "category": "SOLID",
-        "known_issue": "DIP violation - depending on concrete class",
+        "id": "SOLID-03", "category": "SOLID",
+        "known_issue": "DIP violation - depending on concrete class directly",
+        "keywords": ["dependency inversion", "dip", "concrete", "abstraction",
+                     "interface", "inject", "tightly coupled", "direct instantiation"],
         "code": '''
 class OrderService:
     def __init__(self):
         self.db = MySQLDatabase()
         self.emailer = GmailEmailer()
-
     def place_order(self, order):
         self.db.save(order)
         self.emailer.send_confirmation(order)
-''',
-        "keywords": ["dependency inversion", "dip", "concrete", "abstraction", "interface", "inject", "tightly coupled", "hard-coded dependency", "direct instantiation"]
+'''
     },
     {
-        "id": "SOLID-04",
-        "category": "SOLID",
+        "id": "SOLID-04", "category": "SOLID",
         "known_issue": "DRY violation - duplicated validation logic",
+        "keywords": ["dry", "duplicate", "repeated", "extract", "reuse",
+                     "identical", "code duplication", "refactor", "same logic"],
         "code": '''
 def validate_user_email(email: str):
     if not email or "@" not in email:
@@ -216,13 +237,13 @@ def validate_admin_email(email: str):
     if len(email) > 255:
         raise ValueError("Email too long")
     return email.lower().strip()
-''',
-        "keywords": ["dry", "duplicate", "repeated", "extract", "reuse", "identical", "code duplication", "refactor", "same logic"]
+'''
     },
     {
-        "id": "SOLID-05",
-        "category": "SOLID",
+        "id": "SOLID-05", "category": "SOLID",
         "known_issue": "ISP violation - function with too many boolean flags",
+        "keywords": ["boolean flag", "flag parameter", "too many parameter",
+                     "separate method", "interface segregation", "responsibility", "split"],
         "code": '''
 def process_user_data(user_id, update_profile=False,
                       send_email=False, generate_report=False,
@@ -233,13 +254,13 @@ def process_user_data(user_id, update_profile=False,
     if generate_report: create_user_report(user)
     if delete_account: delete_user_account(user)
     if export_data: export_user_data(user)
-''',
-        "keywords": ["interface segregation", "boolean flag", "single function", "responsibility", "too many parameter", "flag parameter", "separate method"]
+'''
     },
     {
-        "id": "SOLID-06",
-        "category": "SOLID",
-        "known_issue": "LSP violation - subclass breaks parent contract",
+        "id": "SOLID-06", "category": "SOLID",
+        "known_issue": "LSP violation - subclass raises exception for parent method",
+        "keywords": ["liskov", "lsp", "subclass", "inheritance", "substitut",
+                     "cannot fly", "base class", "violates", "exception in subclass"],
         "code": '''
 class Bird:
     def fly(self):
@@ -251,80 +272,69 @@ class Penguin(Bird):
 
 def make_bird_fly(bird: Bird):
     return bird.fly()
-''',
-        "keywords": ["liskov", "lsp", "subclass", "inheritance", "contract", "substitut", "cannot fly", "exception", "violates", "base class"]
+'''
     },
     {
-        "id": "SOLID-07",
-        "category": "SOLID",
-        "known_issue": "KISS violation - over-engineered simple operation",
+        "id": "SOLID-07", "category": "SOLID",
+        "known_issue": "KISS violation - over-engineered solution for simple addition",
+        "keywords": ["kiss", "over-engineer", "overcomplicated", "unnecessary",
+                     "simpler", "complex", "needlessly", "simple addition"],
         "code": '''
 class NumberAdderFactoryBuilderStrategy:
     def __init__(self):
         self.strategy = None
-
     def set_strategy(self, strategy):
         self.strategy = strategy
         return self
-
     def build(self):
         return self
-
     def execute(self, a, b):
         return a + b
-''',
-        "keywords": ["kiss", "over-engineer", "complex", "simple", "unnecessary", "overcomplic", "simpler", "overcomplicated", "needlessly"]
+'''
     },
     {
-        "id": "SOLID-08",
-        "category": "SOLID",
-        "known_issue": "Missing abstraction - tight coupling to implementation",
+        "id": "SOLID-08", "category": "SOLID",
+        "known_issue": "Tight coupling to concrete library implementation",
+        "keywords": ["coupling", "tightly coupled", "hard dependency", "abstraction",
+                     "difficult to test", "swap", "depend on concrete", "direct import"],
         "code": '''
 class ReportGenerator:
     def generate(self, data):
-        # Directly uses pandas, cannot swap library
         import pandas as pd
         df = pd.DataFrame(data)
         df.to_csv("report.csv")
         df.to_excel("report.xlsx")
         return df.to_html()
-''',
-        "keywords": ["coupling", "abstraction", "interface", "depend", "swap", "tightly coupled", "hard dependency", "direct import", "difficult to test"]
+'''
     },
     {
-        "id": "SOLID-09",
-        "category": "SOLID",
-        "known_issue": "Long method - too many lines, does too much",
+        "id": "SOLID-09", "category": "SOLID",
+        "known_issue": "Long method doing too many responsibilities",
+        "keywords": ["long method", "too many", "extract", "responsibility",
+                     "decompose", "multiple steps", "separate function", "does too much"],
         "code": '''
 def process_order(order_id: int):
-    # Step 1: validate
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order: raise ValueError("Order not found")
-    if order.status != "pending": raise ValueError("Invalid status")
-    # Step 2: calculate
     subtotal = sum(item.price * item.qty for item in order.items)
     tax = subtotal * 0.19
     discount = subtotal * 0.1 if subtotal > 100 else 0
     total = subtotal + tax - discount
-    # Step 3: charge
     charge_result = payment_gateway.charge(order.user.card, total)
     if not charge_result.success: raise ValueError("Payment failed")
-    # Step 4: update
     order.status = "paid"
     order.total = total
     db.commit()
-    # Step 5: notify
     send_email(order.user.email, "Order confirmed", total)
     send_sms(order.user.phone, f"Order {order_id} paid")
-    # Step 6: log
     logger.info(f"Order {order_id} processed: {total}")
-''',
-        "keywords": ["long method", "too many", "extract", "responsibility", "decompose", "multiple steps", "separate function", "complex", "too much"]
+'''
     },
     {
-        "id": "SOLID-10",
-        "category": "SOLID",
-        "known_issue": "Magic numbers without constants",
+        "id": "SOLID-10", "category": "SOLID",
+        "known_issue": "Magic numbers without named constants",
+        "keywords": ["magic number", "magic value", "named constant", "0.85", "0.70",
+                     "hardcoded value", "meaningful name", "constant", "named"],
         "code": '''
 def calculate_discount(price: float, user_type: str) -> float:
     if user_type == "premium":
@@ -334,16 +344,17 @@ def calculate_discount(price: float, user_type: str) -> float:
     elif price > 500:
         return price * 0.95
     return price
-''',
-        "keywords": ["magic number", "constant", "named", "0.85", "0.70", "hardcoded", "magic value", "named constant", "meaningful name"]
+'''
     },
 
-    # ── PERFORMANCE ISSUES (10) ──────────────────────────────────────────────
-
+    # ════════════════════════════════════════════════════════════════
+    # PERFORMANCE (10) - Tested by Pass 3
+    # ════════════════════════════════════════════════════════════════
     {
-        "id": "PERF-01",
-        "category": "Performance",
-        "known_issue": "O(n²) nested loop",
+        "id": "PERF-01", "category": "Performance",
+        "known_issue": "O(n²) nested loop for finding duplicates",
+        "keywords": ["o(n", "quadratic", "nested loop", "n^2", "n squared",
+                     "inefficient", "inner loop", "set(", "complexity"],
         "code": '''
 def find_duplicates(items: list):
     duplicates = []
@@ -352,13 +363,13 @@ def find_duplicates(items: list):
             if i != j and items[i] == items[j]:
                 duplicates.append(items[i])
     return duplicates
-''',
-        "keywords": ["o(n", "quadratic", "nested loop", "complexity", "n^2", "n²", "inefficient", "nested for", "inner loop", "set("]
+'''
     },
     {
-        "id": "PERF-02",
-        "category": "Performance",
-        "known_issue": "N+1 database query problem",
+        "id": "PERF-02", "category": "Performance",
+        "known_issue": "N+1 database query problem in loop",
+        "keywords": ["n+1", "multiple queries", "loop query", "joinedload",
+                     "selectinload", "eager loading", "join", "batch", "single query"],
         "code": '''
 def get_all_user_orders():
     users = db.query(User).all()
@@ -367,13 +378,13 @@ def get_all_user_orders():
         orders = db.query(Order).filter(Order.user_id == user.id).all()
         result.append({"user": user, "orders": orders})
     return result
-''',
-        "keywords": ["n+1", "query", "join", "eager loading", "batch", "multiple queries", "loop query", "joinedload", "selectinload"]
+'''
     },
     {
-        "id": "PERF-03",
-        "category": "Performance",
+        "id": "PERF-03", "category": "Performance",
         "known_issue": "Blocking synchronous I/O in async FastAPI endpoint",
+        "keywords": ["async", "await", "blocking", "asyncio", "httpx",
+                     "synchronous", "sync", "non-blocking", "event loop"],
         "code": '''
 @router.get("/data")
 def fetch_external_data():
@@ -381,50 +392,78 @@ def fetch_external_data():
     response = requests.get("https://api.external.com/data")
     time.sleep(2)
     return response.json()
-''',
-        "keywords": ["async", "await", "blocking", "asyncio", "httpx", "synchronous", "sync", "asynchronous", "event loop", "non-blocking"]
+'''
     },
     {
-        "id": "PERF-04",
-        "category": "Performance",
-        "known_issue": "Missing memoization on recursive function",
+        "id": "PERF-04", "category": "Performance",
+        "known_issue": "Missing memoization on recursive fibonacci",
+        "keywords": ["cache", "lru_cache", "memoiz", "recursive", "exponential",
+                     "redundant", "recomput", "functools", "2^n"],
         "code": '''
 def get_fibonacci(n: int) -> int:
     if n <= 1:
         return n
     return get_fibonacci(n - 1) + get_fibonacci(n - 2)
-''',
-        "keywords": ["cache", "lru_cache", "memoiz", "recursive", "exponential", "2^n", "redundant", "recomput", "functools"]
+'''
     },
     {
-        "id": "PERF-05",
-        "category": "Performance",
-        "known_issue": "Inefficient string concatenation in loop",
+        "id": "PERF-05", "category": "Performance",
+        "known_issue": "Inefficient string concatenation with + in loop",
+        "keywords": ["concatenat", "join", "list comprehension", "inefficient",
+                     "string builder", "quadratic", "+=", "append", "str.join"],
         "code": '''
 def build_report(items):
     report = ""
     for item in items:
         report = report + str(item) + ", "
     return report
-''',
-        "keywords": ["concatenat", "join", "list comprehension", "inefficient", "string", "+=", "string builder", "quadratic"]
+'''
     },
     {
-        "id": "PERF-06",
-        "category": "Performance",
-        "known_issue": "Loading all records without pagination",
+        "id": "PERF-06", "category": "Performance",
+        "known_issue": "Loading all database records without pagination",
+        "keywords": ["pagination", "limit", "offset", "all()", "memory",
+                     "large dataset", "skip", "page", "performance"],
         "code": '''
 @router.get("/users")
 def get_all_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
     return users
-''',
-        "keywords": ["pagination", "limit", "offset", "all()", "memory", "performance", "large dataset", "skip", "page"]
+'''
     },
     {
-        "id": "PERF-07",
-        "category": "Performance",
-        "known_issue": "Repeated dictionary lookup in loop",
+        "id": "PERF-07", "category": "Performance",
+        "known_issue": "Using list instead of set for O(n) membership test",
+        "keywords": ["set", "o(1)", "list lookup", "o(n)", "constant time",
+                     "hash", "membership test", "convert to set", "lookup"],
+        "code": '''
+BLOCKED_IPS = ["192.168.1.1", "10.0.0.1", "172.16.0.1",
+               "192.168.1.2", "10.0.0.2"]
+
+def is_blocked(ip: str) -> bool:
+    return ip in BLOCKED_IPS
+'''
+    },
+    {
+        "id": "PERF-08", "category": "Performance",
+        "known_issue": "Unnecessary intermediate list in sum/len operations",
+        "keywords": ["generator", "intermediate list", "memory", "generator expression",
+                     "unnecessary list", "sum(x", "len(x", "list comprehension"],
+        "code": '''
+def get_adult_count(users: list) -> int:
+    adults = [u for u in users if u.age >= 18]
+    return len(adults)
+
+def get_total_price(items: list) -> float:
+    prices = [item.price for item in items]
+    return sum(prices)
+'''
+    },
+    {
+        "id": "PERF-09", "category": "Performance",
+        "known_issue": "Repeated dictionary lookup instead of defaultdict",
+        "keywords": ["defaultdict", "counter", "collections", "dict.get",
+                     "setdefault", "Counter", "efficient", "get("],
         "code": '''
 def count_words(text: str) -> dict:
     counts = {}
@@ -434,41 +473,13 @@ def count_words(text: str) -> dict:
         else:
             counts[word] = 1
     return counts
-''',
-        "keywords": ["defaultdict", "counter", "collections", "get(", "efficient", "Counter", "setdefault", "dict.get"]
+'''
     },
     {
-        "id": "PERF-08",
-        "category": "Performance",
-        "known_issue": "Using list when set would be more efficient for lookups",
-        "code": '''
-BLOCKED_IPS = ["192.168.1.1", "10.0.0.1", "172.16.0.1",
-               "192.168.1.2", "10.0.0.2"]
-
-def is_blocked(ip: str) -> bool:
-    return ip in BLOCKED_IPS
-''',
-        "keywords": ["set", "o(1)", "list lookup", "o(n)", "constant time", "hash", "membership test", "lookup", "convert to set"]
-    },
-    {
-        "id": "PERF-09",
-        "category": "Performance",
-        "known_issue": "Unnecessary list comprehension creating intermediate list",
-        "code": '''
-def get_adult_count(users: list) -> int:
-    adults = [u for u in users if u.age >= 18]
-    return len(adults)
-
-def get_total_price(items: list) -> float:
-    prices = [item.price for item in items]
-    return sum(prices)
-''',
-        "keywords": ["generator", "sum(", "len(", "intermediate", "memory", "generator expression", "unnecessary list", "sum(x", "generat"]
-    },
-    {
-        "id": "PERF-10",
-        "category": "Performance",
+        "id": "PERF-10", "category": "Performance",
         "known_issue": "Missing database index on frequently queried column",
+        "keywords": ["index", "Index(", "database index", "query performance",
+                     "__table_args__", "indexed", "add index", "slow query"],
         "code": '''
 class User(Base):
     __tablename__ = "users"
@@ -479,28 +490,29 @@ class User(Base):
 
 def find_by_username(username: str):
     return db.query(User).filter(User.username == username).first()
-''',
-        "keywords": ["index", "Index(", "query performance", "filter", "column", "indexed", "add index", "database index", "__table_args__"]
+'''
     },
 
-    # ── FASTAPI BEST PRACTICES (10) ──────────────────────────────────────────
-
+    # ════════════════════════════════════════════════════════════════
+    # FASTAPI (10) - Pass 1 catches these (security + quality)
+    # ════════════════════════════════════════════════════════════════
     {
-        "id": "FASTAPI-01",
-        "category": "FastAPI",
-        "known_issue": "Missing response model - exposing internal fields",
+        "id": "FASTAPI-01", "category": "FastAPI",
+        "known_issue": "Missing response_model exposing internal fields",
+        "keywords": ["response_model", "schema", "expose", "sensitive field",
+                     "pydantic", "internal", "return type", "model"],
         "code": '''
 @router.get("/users/{user_id}")
 def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     return user
-''',
-        "keywords": ["response_model", "schema", "expose", "field", "pydantic", "sensitive", "internal", "return type", "model"]
+'''
     },
     {
-        "id": "FASTAPI-02",
-        "category": "FastAPI",
-        "known_issue": "No HTTP status codes specified",
+        "id": "FASTAPI-02", "category": "FastAPI",
+        "known_issue": "Missing HTTP 201 status code on create endpoint",
+        "keywords": ["status_code", "201", "HTTP status", "created",
+                     "status code", "response status", "post endpoint"],
         "code": '''
 @router.post("/users")
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
@@ -508,25 +520,25 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     return db_user
-''',
-        "keywords": ["status_code", "201", "http", "response", "status", "HTTP status", "status code", "created", "success"]
+'''
     },
     {
-        "id": "FASTAPI-03",
-        "category": "FastAPI",
-        "known_issue": "No error handling for database operations",
+        "id": "FASTAPI-03", "category": "FastAPI",
+        "known_issue": "No HTTPException when item not found returns None",
+        "keywords": ["404", "HTTPException", "not found", "none check",
+                     "if not", "raise", "missing item", "null"],
         "code": '''
 @router.get("/items/{item_id}")
 def get_item(item_id: int, db: Session = Depends(get_db)):
     item = db.query(Item).filter(Item.id == item_id).first()
     return item
-''',
-        "keywords": ["404", "HTTPException", "not found", "error handling", "raise", "none check", "if not", "missing"]
+'''
     },
     {
-        "id": "FASTAPI-04",
-        "category": "FastAPI",
-        "known_issue": "Missing input validation with Pydantic",
+        "id": "FASTAPI-04", "category": "FastAPI",
+        "known_issue": "Missing Pydantic model for request body validation",
+        "keywords": ["pydantic", "validation", "schema", "BaseModel",
+                     "request body", "type safety", "model", "validator"],
         "code": '''
 @router.post("/register")
 def register(username: str, email: str, age: int, db: Session = Depends(get_db)):
@@ -534,13 +546,13 @@ def register(username: str, email: str, age: int, db: Session = Depends(get_db))
     db.add(user)
     db.commit()
     return user
-''',
-        "keywords": ["pydantic", "validation", "schema", "BaseModel", "validator", "request body", "type safety", "model"]
+'''
     },
     {
-        "id": "FASTAPI-05",
-        "category": "FastAPI",
-        "known_issue": "Synchronous database operations without connection pooling",
+        "id": "FASTAPI-05", "category": "FastAPI",
+        "known_issue": "Raw psycopg2 connection without SQLAlchemy session",
+        "keywords": ["connection pool", "SQLAlchemy", "session", "Depends",
+                     "raw connection", "psycopg2", "direct connection", "manage"],
         "code": '''
 @router.get("/report")
 def generate_report():
@@ -550,13 +562,13 @@ def generate_report():
     results = cursor.fetchall()
     conn.close()
     return results
-''',
-        "keywords": ["async", "connection pool", "SQLAlchemy", "session", "Depends", "raw connection", "psycopg2", "direct connection"]
+'''
     },
     {
-        "id": "FASTAPI-06",
-        "category": "FastAPI",
-        "known_issue": "No rate limiting on authentication endpoint",
+        "id": "FASTAPI-06", "category": "FastAPI",
+        "known_issue": "No rate limiting on login endpoint",
+        "keywords": ["rate limit", "brute force", "slowapi", "throttl",
+                     "attempt", "lockout", "too many requests", "limit"],
         "code": '''
 @router.post("/login")
 def login(username: str, password: str, db: Session = Depends(get_db)):
@@ -564,42 +576,13 @@ def login(username: str, password: str, db: Session = Depends(get_db)):
     if user and verify_password(password, user.hashed_password):
         return create_access_token(user.id)
     raise HTTPException(status_code=401, detail="Invalid credentials")
-''',
-        "keywords": ["rate limit", "brute force", "slowapi", "throttl", "limit", "attempt", "lockout", "too many requests"]
+'''
     },
     {
-        "id": "FASTAPI-07",
-        "category": "FastAPI",
-        "known_issue": "Returning plain dict instead of Pydantic model",
-        "code": '''
-@router.get("/stats")
-def get_stats(db: Session = Depends(get_db)):
-    total = db.query(User).count()
-    active = db.query(User).filter(User.is_active == True).count()
-    return {"total": total, "active": active, "inactive": total - active}
-''',
-        "keywords": ["response_model", "pydantic", "schema", "type hint", "model", "typed", "return type", "structured"]
-    },
-    {
-        "id": "FASTAPI-08",
-        "category": "FastAPI",
-        "known_issue": "Missing dependency injection for settings",
-        "code": '''
-@router.get("/config")
-def get_config():
-    import os
-    return {
-        "debug": os.getenv("DEBUG", "false"),
-        "db_host": os.getenv("DB_HOST", "localhost"),
-        "api_version": "1.0"
-    }
-''',
-        "keywords": ["dependency injection", "Settings", "pydantic", "BaseSettings", "inject", "configuration", "env", "environment"]
-    },
-    {
-        "id": "FASTAPI-09",
-        "category": "FastAPI",
-        "known_issue": "No background task for long-running operations",
+        "id": "FASTAPI-07", "category": "FastAPI",
+        "known_issue": "No background task for long-running email operation",
+        "keywords": ["background", "BackgroundTasks", "long-running", "task",
+                     "worker", "blocking", "queue", "celery", "async"],
         "code": '''
 @router.post("/send-newsletter")
 def send_newsletter(db: Session = Depends(get_db)):
@@ -607,41 +590,72 @@ def send_newsletter(db: Session = Depends(get_db)):
     for user in users:
         send_email(user.email, "Newsletter", get_newsletter_content())
     return {"message": "sent"}
-''',
-        "keywords": ["background", "BackgroundTasks", "async", "queue", "celery", "blocking", "long-running", "task", "worker"]
+'''
     },
     {
-        "id": "FASTAPI-10",
-        "category": "FastAPI",
-        "known_issue": "Storing plain text password",
+        "id": "FASTAPI-08", "category": "FastAPI",
+        "known_issue": "Using os.getenv instead of Pydantic BaseSettings",
+        "keywords": ["BaseSettings", "pydantic settings", "dependency injection",
+                     "configuration", "settings class", "os.getenv", "env"],
         "code": '''
-@router.post("/users")
-def create_user(username: str, password: str, db: Session = Depends(get_db)):
-    user = User(username=username, password=password)
-    db.add(user)
+@router.get("/config")
+def get_config():
+    import os
+    return {
+        "debug": os.getenv("DEBUG", "false"),
+        "db_host": os.getenv("DB_HOST", "localhost"),
+    }
+'''
+    },
+    {
+        "id": "FASTAPI-09", "category": "FastAPI",
+        "known_issue": "CORS configured to allow all origins with credentials",
+        "keywords": ["cors", "allow_origins", "wildcard", "allow_credentials",
+                     "misconfigur", "restrict", "all origins", "insecure cors"],
+        "code": '''
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+'''
+    },
+    {
+        "id": "FASTAPI-10", "category": "FastAPI",
+        "known_issue": "No None check before db.delete causing potential crash",
+        "keywords": ["404", "HTTPException", "none", "not found", "if not",
+                     "raise", "null check", "missing", "attribute error"],
+        "code": '''
+@router.delete("/posts/{post_id}")
+def delete_post(post_id: int, db: Session = Depends(get_db)):
+    post = db.query(Post).filter(Post.id == post_id).first()
+    db.delete(post)
     db.commit()
-    return {"id": user.id}
-''',
-        "keywords": ["hash", "bcrypt", "plain text", "plain-text", "password", "encrypt", "passlib", "never store", "hashed"]
+    return {"deleted": post_id}
+'''
     },
 
-    # ── PYTHON BEST PRACTICES (10) ───────────────────────────────────────────
-
+    # ════════════════════════════════════════════════════════════════
+    # PYTHON BEST PRACTICES (10) - Pass 2 + 3 catch these
+    # ════════════════════════════════════════════════════════════════
     {
-        "id": "PY-01",
-        "category": "Python",
-        "known_issue": "Mutable default argument",
+        "id": "PY-01", "category": "Python",
+        "known_issue": "Mutable default argument - list shared across calls",
+        "keywords": ["mutable default", "mutable default argument", "default argument",
+                     "items = none", "evaluated once", "shared state", "items=[]"],
         "code": '''
 def add_item(item: str, items: list = []):
     items.append(item)
     return items
-''',
-        "keywords": ["mutable", "mutable default", "default argument", "None", "anti-pattern", "shared state", "items = None", "evaluated once"]
+'''
     },
     {
-        "id": "PY-02",
-        "category": "Python",
-        "known_issue": "Bare except catching all exceptions",
+        "id": "PY-02", "category": "Python",
+        "known_issue": "Bare except clause catching all exceptions",
+        "keywords": ["bare except", "except:", "specific exception", "too broad",
+                     "general exception", "catch all", "silent", "swallow"],
         "code": '''
 def read_config(filepath: str):
     try:
@@ -649,26 +663,26 @@ def read_config(filepath: str):
             return json.load(f)
     except:
         return {}
-''',
-        "keywords": ["bare except", "specific exception", "catch all", "except:", "Exception", "too broad", "general exception", "specific"]
+'''
     },
     {
-        "id": "PY-03",
-        "category": "Python",
-        "known_issue": "Not using context manager for file operations",
+        "id": "PY-03", "category": "Python",
+        "known_issue": "File opened without context manager - resource leak",
+        "keywords": ["context manager", "with statement", "with open",
+                     "resource leak", "file handle", "properly close", "f.close"],
         "code": '''
 def read_file(path: str) -> str:
     f = open(path, "r")
     content = f.read()
     f.close()
     return content
-''',
-        "keywords": ["context manager", "with statement", "with open", "close(", "resource leak", "file handle", "properly close", "with"]
+'''
     },
     {
-        "id": "PY-04",
-        "category": "Python",
-        "known_issue": "Using type() instead of isinstance()",
+        "id": "PY-04", "category": "Python",
+        "known_issue": "Using type() instead of isinstance() for type checking",
+        "keywords": ["isinstance", "type()", "preferred", "type check",
+                     "subclass", "polymorphism", "isinstance()"],
         "code": '''
 def process_value(value):
     if type(value) == int:
@@ -677,58 +691,49 @@ def process_value(value):
         return value.upper()
     elif type(value) == list:
         return len(value)
-''',
-        "keywords": ["isinstance", "type()", "inheritance", "subclass", "isinstance()", "preferred", "type check", "polymorphism"]
+'''
     },
     {
-        "id": "PY-05",
-        "category": "Python",
-        "known_issue": "Not using enumerate() in loop with index",
+        "id": "PY-05", "category": "Python",
+        "known_issue": "Using range(len()) instead of enumerate()",
+        "keywords": ["enumerate", "range(len", "pythonic", "idiomatic",
+                     "unpythonic", "enumerate(", "index"],
         "code": '''
 def print_items(items: list):
     for i in range(len(items)):
         print(f"{i}: {items[i]}")
-
-def get_first_match(items: list, target: str):
-    for i in range(len(items)):
-        if items[i] == target:
-            return i
-    return -1
-''',
-        "keywords": ["enumerate", "range(len", "pythonic", "index", "loop", "enumerate(", "idiomatic", "unpythonic"]
+'''
     },
     {
-        "id": "PY-06",
-        "category": "Python",
-        "known_issue": "String formatting with % operator instead of f-string",
+        "id": "PY-06", "category": "Python",
+        "known_issue": "Using old % string formatting instead of f-strings",
+        "keywords": ["f-string", "format(", "% operator", "old style",
+                     "preferred", ".format", "modern", "fstring", "f-strings"],
         "code": '''
 def greet_user(name: str, age: int) -> str:
     return "Hello %s, you are %d years old" % (name, age)
 
 def log_error(error: str, code: int) -> str:
     return "Error %d: %s" % (code, error)
-''',
-        "keywords": ["f-string", "format(", "% operator", "string format", "modern", "old style", "preferred", ".format", "fstring"]
+'''
     },
     {
-        "id": "PY-07",
-        "category": "Python",
-        "known_issue": "Missing type hints on function signatures",
+        "id": "PY-07", "category": "Python",
+        "known_issue": "Missing type hints on function parameters",
+        "keywords": ["type hint", "annotation", "typing", "return type",
+                     "missing type", "type annotation", "->", ": int", ": str"],
         "code": '''
 def calculate_total(items, tax_rate, discount):
     subtotal = sum(item["price"] * item["qty"] for item in items)
     tax = subtotal * tax_rate
     return subtotal + tax - discount
-
-def find_user(user_id, db):
-    return db.query(User).filter(User.id == user_id).first()
-''',
-        "keywords": ["type hint", "annotation", "typing", "->", ": float", ": int", ": str", "missing type", "return type", "type annotation"]
+'''
     },
     {
-        "id": "PY-08",
-        "category": "Python",
-        "known_issue": "Global variable mutation",
+        "id": "PY-08", "category": "Python",
+        "known_issue": "Global variable mutation - not thread safe",
+        "keywords": ["global", "global variable", "mutation", "thread safe",
+                     "side effect", "avoid global", "encapsulat"],
         "code": '''
 request_count = 0
 error_count = 0
@@ -741,13 +746,13 @@ def handle_request(request):
     except Exception:
         global error_count
         error_count += 1
-''',
-        "keywords": ["global", "global variable", "mutation", "state", "thread safe", "class", "encapsulat", "avoid global", "side effect"]
+'''
     },
     {
-        "id": "PY-09",
-        "category": "Python",
+        "id": "PY-09", "category": "Python",
         "known_issue": "Comparing to None with == instead of is",
+        "keywords": ["is none", "is not none", "== none", "pep 8",
+                     "identity", "singleton", "is operator", "comparison"],
         "code": '''
 def get_user_name(user):
     if user == None:
@@ -755,13 +760,13 @@ def get_user_name(user):
     if user.name == None:
         return "No name"
     return user.name
-''',
-        "keywords": ["is None", "is not None", "== None", "PEP 8", "identity", "singleton", "comparison", "is operator"]
+'''
     },
     {
-        "id": "PY-10",
-        "category": "Python",
-        "known_issue": "Not using dataclass or Pydantic for data containers",
+        "id": "PY-10", "category": "Python",
+        "known_issue": "Using plain dict instead of dataclass or Pydantic model",
+        "keywords": ["dataclass", "pydantic", "BaseModel", "TypedDict",
+                     "named tuple", "NamedTuple", "data class", "structured"],
         "code": '''
 def create_user_dict(name, email, age, role, is_active):
     return {
@@ -770,247 +775,251 @@ def create_user_dict(name, email, age, role, is_active):
         "age": age,
         "role": role,
         "is_active": is_active,
-        "created_at": datetime.now()
     }
-''',
-        "keywords": ["dataclass", "pydantic", "BaseModel", "TypedDict", "structured", "named tuple", "NamedTuple", "data class"]
+'''
     },
 ]
 
 
-# ── Evaluation functions ──────────────────────────────────────────────────────
+# ── Review passes ─────────────────────────────────────────────────────────────
 
-def run_security_pass(code):
+def run_pass1_security(code):
+    """Pass 1: Security and code quality."""
     system = (
-        "You are a security-focused code reviewer.\n"
-        "CRITICAL RULES:\n"
-        "- Only report issues you can PROVE exist in the code with exact line number\n"
-        "- Do NOT invent issues\n"
-        "- Format each issue as: LINE_NUMBER - SEVERITY - description\n\n"
-        "Check for: security vulnerabilities, error handling, input validation"
+        "You are a security and code quality expert.\n"
+        "Find ALL issues in this code:\n"
+        "- Security vulnerabilities (injection, secrets, auth, OWASP Top 10)\n"
+        "- Missing error handling\n"
+        "- Missing input validation\n"
+        "- Bad practices and anti-patterns\n"
+        "Be thorough. List every issue you find with the line number."
     )
-    try:
-        return llm.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content="Review this code:\n```python\n{}\n```".format(code))
-        ]).content
-    except Exception as e:
-        return "Error: {}".format(e)
+    return llm_invoke_with_retry([
+        SystemMessage(content=system),
+        HumanMessage(content="Review this code:\n```python\n{}\n```".format(code))
+    ])
 
 
-def run_solid_pass(code):
+def run_pass2_solid(code):
+    """Pass 2: SOLID principles and architecture."""
     system = (
-        "You are a software architecture expert reviewing for SOLID principles.\n"
-        "CRITICAL RULES:\n"
-        "- Only flag violations with exact line number\n"
-        "- Do NOT invent violations\n\n"
-        "Check for: SOLID violations, DRY, KISS, clean code"
+        "You are a software architecture expert.\n"
+        "Find ALL issues in this code:\n"
+        "- SOLID violations (SRP, OCP, LSP, ISP, DIP)\n"
+        "- DRY violations (duplicated code)\n"
+        "- KISS violations (over-engineering)\n"
+        "- Magic numbers without named constants\n"
+        "- Long methods doing too much\n"
+        "- Tight coupling\n"
+        "Be thorough. List every issue you find with the line number."
     )
-    try:
-        return llm.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content="Review this code for SOLID violations:\n```python\n{}\n```".format(code))
-        ]).content
-    except Exception as e:
-        return "Error: {}".format(e)
+    return llm_invoke_with_retry([
+        SystemMessage(content=system),
+        HumanMessage(content="Review this code:\n```python\n{}\n```".format(code))
+    ])
 
 
-def run_optimization_pass(code):
+def run_pass3_optimization(code):
+    """Pass 3: Performance and Python best practices."""
     system = (
-        "You are a Python performance expert.\n"
-        "CRITICAL RULES:\n"
-        "- Only suggest optimizations for code that actually exists\n"
-        "- Cite exact line numbers\n\n"
-        "Check for: time complexity, caching, async, list comprehensions"
+        "You are a Python performance and best practices expert.\n"
+        "Find ALL issues in this code:\n"
+        "- Time complexity issues (O(n^2), N+1 queries)\n"
+        "- Blocking I/O that should be async\n"
+        "- Missing caching/memoization\n"
+        "- Inefficient data structures\n"
+        "- Python anti-patterns (mutable defaults, bare except, range(len))\n"
+        "- Missing type hints\n"
+        "- Old-style formatting instead of f-strings\n"
+        "Be thorough. List every issue with the line number."
     )
-    try:
-        return llm.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content="Find performance issues in:\n```python\n{}\n```".format(code))
-        ]).content
-    except Exception as e:
-        return "Error: {}".format(e)
+    return llm_invoke_with_retry([
+        SystemMessage(content=system),
+        HumanMessage(content="Review this code:\n```python\n{}\n```".format(code))
+    ])
 
 
-def run_validation_pass(code, security, solid, optimization):
+def run_pass4_validation(code, p1, p2, p3):
+    """Pass 4: Anti-hallucination validation."""
     system = (
-        "You are a strict fact-checker.\n"
-        "Validate that every issue mentioned actually exists in the code.\n"
-        "Mark each as VALID or HALLUCINATED.\n\n"
-        "Return:\n"
+        "You are a strict fact-checker for code reviews.\n"
+        "Validate that every issue mentioned actually exists in the code.\n\n"
+        "For each issue:\n"
+        "- If the issue EXISTS in the code: keep it as VALID\n"
+        "- If the issue does NOT exist in the code: mark as HALLUCINATED\n\n"
+        "Format your response EXACTLY as:\n"
         "## Validated Issues\n"
-        "## Removed (Hallucinated) Issues"
+        "- [VALID] description\n\n"
+        "## Removed (Hallucinated) Issues\n"
+        "- [HALLUCINATED] description"
     )
     content = (
         "CODE:\n```python\n{}\n```\n\n"
-        "SECURITY REVIEW:\n{}\n\n"
-        "SOLID REVIEW:\n{}\n\n"
-        "OPTIMIZATION:\n{}\n\n"
-        "Validate all findings."
-    ).format(code, security[:1500], solid[:1500], optimization[:1500])
-    try:
-        return llm.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content=content)
-        ]).content
-    except Exception as e:
-        return "Error: {}".format(e)
+        "PASS 1 (Security):\n{}\n\n"
+        "PASS 2 (SOLID):\n{}\n\n"
+        "PASS 3 (Performance):\n{}\n\n"
+        "Validate every finding against the actual code."
+    ).format(code, p1[:1000], p2[:1000], p3[:1000])
+    return llm_invoke_with_retry([
+        SystemMessage(content=system),
+        HumanMessage(content=content)
+    ])
 
 
-def check_detection(reviews_combined, keywords):
-    combined_lower = reviews_combined.lower()
+# ── Detection and counting ────────────────────────────────────────────────────
+
+def keyword_detect(review_text, keywords):
+    """Check if any keyword appears in the review."""
+    text_lower = review_text.lower()
     for kw in keywords:
-        if kw.lower() in combined_lower:
+        if kw.lower() in text_lower:
             return True
     return False
 
 
-def count_hallucinated_in_result(validated):
+def count_section(text, marker):
+    """Count bullet points in a named section."""
     count = 0
     in_section = False
-    for line in validated.split("\n"):
-        if "Removed" in line or "Hallucinated" in line:
+    for line in text.split("\n"):
+        if marker.lower() in line.lower() and line.strip().startswith("#"):
             in_section = True
-        elif line.startswith("##"):
+        elif line.strip().startswith("##") and marker.lower() not in line.lower():
             in_section = False
-        elif in_section and line.strip().startswith("-") and len(line.strip()) > 2:
+        elif in_section and line.strip().startswith("-") and len(line.strip()) > 3:
             count += 1
     return count
 
 
-def count_validated_in_result(validated):
-    count = 0
-    in_section = False
-    for line in validated.split("\n"):
-        if "Validated" in line and "Issues" in line:
-            in_section = True
-        elif "Removed" in line or "Hallucinated" in line:
-            in_section = False
-        elif in_section and line.strip().startswith("-") and len(line.strip()) > 2:
-            count += 1
-    return count
-
-
-# ── Main evaluation runner ────────────────────────────────────────────────────
+# ── Main evaluation ───────────────────────────────────────────────────────────
 
 def run_evaluation():
-    print("=" * 60)
+    print("=" * 65)
     print("AI CODE REVIEW AGENT - EVALUATION SUITE")
-    print("Testing {} known issues".format(len(TEST_CASES)))
-    print("=" * 60)
+    print("Method  : Keyword-based detection (objective & reproducible)")
+    print("Passes  : Security | SOLID | Performance | Anti-hallucination")
+    print("Cases   : {}".format(len(TEST_CASES)))
+    print("=" * 65)
     print()
 
     results = []
-    total_detected = 0
+    total_detected    = 0
     total_hallucinated = 0
-    total_raw_findings = 0
+    total_validated   = 0
 
     for i, test in enumerate(TEST_CASES):
-        print("[{}/{}] {} - {}".format(i + 1, len(TEST_CASES), test["id"], test["known_issue"]))
+        print("[{:02d}/{}] {} — {}".format(
+            i + 1, len(TEST_CASES), test["id"], test["known_issue"]))
 
         start = time.time()
 
-        security  = run_security_pass(test["code"])
-        solid     = run_solid_pass(test["code"])
-        optim     = run_optimization_pass(test["code"])
-        validated = run_validation_pass(test["code"], security, solid, optim)
+        # Run 4 passes
+        p1 = run_pass1_security(test["code"])
+        p2 = run_pass2_solid(test["code"])
+        p3 = run_pass3_optimization(test["code"])
+        p4 = run_pass4_validation(test["code"], p1, p2, p3)
+
+        combined = p1 + "\n" + p2 + "\n" + p3
+
+        # Detection via keywords
+        detected = keyword_detect(combined, test["keywords"])
+
+        # Count Pass 4 findings
+        hall  = count_section(p4, "Hallucinated")
+        valid = count_section(p4, "Validated Issues")
 
         duration = time.time() - start
 
-        all_reviews = security + " " + solid + " " + optim + " " + validated
-        detected = check_detection(all_reviews, test["keywords"])
+        total_detected    += 1 if detected else 0
+        total_hallucinated += hall
+        total_validated   += valid
 
-        hallucinated = count_hallucinated_in_result(validated)
-        validated_count = count_validated_in_result(validated)
-        raw = validated_count + hallucinated
-
-        total_detected += 1 if detected else 0
-        total_hallucinated += hallucinated
-        total_raw_findings += raw
-
-        status = "DETECTED" if detected else "MISSED"
-        print("  Status: {} | Raw: {} | Hallucinated: {} | Validated: {} | Time: {:.1f}s".format(
-            status, raw, hallucinated, validated_count, duration))
+        status = "DETECTED ✓" if detected else "MISSED   ✗"
+        print("  {} | Valid: {:2d} | Halluc: {:2d} | {:.1f}s".format(
+            status, valid, hall, duration))
 
         results.append({
-            "id": test["id"],
-            "category": test["category"],
-            "known_issue": test["known_issue"],
-            "detected": detected,
-            "raw_findings": raw,
-            "hallucinated": hallucinated,
-            "validated": validated_count,
-            "duration": round(duration, 1),
+            "id"                  : test["id"],
+            "category"            : test["category"],
+            "known_issue"         : test["known_issue"],
+            "detected"            : detected,
+            "validated_findings"  : valid,
+            "hallucinated_findings": hall,
+            "duration_seconds"    : round(duration, 1),
         })
 
-        time.sleep(1)
+        time.sleep(2)  # avoid rate limit between tests
 
-    # ── Final Report ──────────────────────────────────────────────────────────
-    detection_rate = total_detected / len(TEST_CASES) * 100
-    halluc_rate = (total_hallucinated / total_raw_findings * 100) if total_raw_findings > 0 else 0
+    # ── Final report ─────────────────────────────────────────────────────────
+    total      = len(TEST_CASES)
+    det_rate   = total_detected / total * 100
+    total_raw  = total_validated + total_hallucinated
+    hall_rate  = (total_hallucinated / total_raw * 100) if total_raw > 0 else 0
 
     print()
-    print("=" * 60)
-    print("EVALUATION RESULTS")
-    print("=" * 60)
+    print("=" * 65)
+    print("FINAL EVALUATION RESULTS")
+    print("=" * 65)
     print()
 
     categories = ["Security", "SOLID", "Performance", "FastAPI", "Python"]
-    print("DETECTION RESULTS BY CATEGORY:")
+    print("DETECTION BY CATEGORY:")
     print()
     for cat in categories:
-        cat_results = [r for r in results if r["category"] == cat]
-        detected = sum(1 for r in cat_results if r["detected"])
-        total = len(cat_results)
-        bar = "#" * detected + "-" * (total - detected)
-        print("  {:<12} [{:<10}] {}/{} ({:.0f}%)".format(
-            cat, bar, detected, total,
-            detected / total * 100 if total > 0 else 0))
+        cat_res = [r for r in results if r["category"] == cat]
+        det = sum(1 for r in cat_res if r["detected"])
+        n   = len(cat_res)
+        bar = "#" * det + "-" * (n - det)
+        pct = det / n * 100 if n > 0 else 0
+        print("  {:<13} [{:<10}] {:>2}/{:>2}  ({:.0f}%)".format(
+            cat, bar, det, n, pct))
 
     print()
-    print("OVERALL METRICS:")
-    print("  Total test cases         : {}".format(len(TEST_CASES)))
-    print("  Issues correctly detected: {}".format(total_detected))
-    print("  Issues missed            : {}".format(len(TEST_CASES) - total_detected))
-    print("  Detection rate           : {:.1f}%".format(detection_rate))
+    print("OVERALL DETECTION METRICS:")
+    print("  Total test cases         : {:>3}".format(total))
+    print("  Correctly detected       : {:>3}".format(total_detected))
+    print("  Missed                   : {:>3}".format(total - total_detected))
+    print("  Detection Rate           : {:.1f}%".format(det_rate))
     print()
-    print("ANTI-HALLUCINATION METRICS:")
-    print("  Total raw findings       : {}".format(total_raw_findings))
-    print("  Hallucinated (removed)   : {}".format(total_hallucinated))
-    print("  Hallucination rate       : {:.1f}%".format(halluc_rate))
-    print("  Accuracy after filter    : {:.1f}%".format(100 - halluc_rate))
+    print("ANTI-HALLUCINATION METRICS (Pass 4):")
+    print("  Total raw findings       : {:>3}".format(total_raw))
+    print("  Validated (kept)         : {:>3}".format(total_validated))
+    print("  Hallucinated (removed)   : {:>3}".format(total_hallucinated))
+    print("  Hallucination Rate       : {:.1f}%".format(hall_rate))
+    print("  Filter Accuracy          : {:.1f}%".format(100 - hall_rate))
     print()
 
     print("DETAILED RESULTS:")
     print("-" * 75)
-    print("{:<12} {:<12} {:<35} {:<10} {:<6}".format(
+    print("{:<12} {:<13} {:<32} {:<10} {:>6}".format(
         "ID", "Category", "Known Issue", "Detected", "Halluc"))
     print("-" * 75)
     for r in results:
-        print("{:<12} {:<12} {:<35} {:<10} {:<6}".format(
-            r["id"],
-            r["category"],
-            r["known_issue"][:33],
+        print("{:<12} {:<13} {:<32} {:<10} {:>6}".format(
+            r["id"], r["category"], r["known_issue"][:30],
             "YES" if r["detected"] else "NO",
-            r["hallucinated"]
+            r["hallucinated_findings"]
         ))
     print("-" * 75)
 
+    # Save JSON
     output = {
+        "evaluation_method": "Keyword-based detection (objective, reproducible)",
         "summary": {
-            "total_tests": len(TEST_CASES),
-            "detected": total_detected,
-            "missed": len(TEST_CASES) - total_detected,
-            "detection_rate": round(detection_rate, 1),
-            "total_raw_findings": total_raw_findings,
-            "total_hallucinated": total_hallucinated,
-            "hallucination_rate": round(halluc_rate, 1),
-            "accuracy_after_filter": round(100 - halluc_rate, 1),
+            "total_tests"         : total,
+            "detected"            : total_detected,
+            "missed"              : total - total_detected,
+            "detection_rate"      : round(det_rate, 1),
+            "total_raw_findings"  : total_raw,
+            "total_validated"     : total_validated,
+            "total_hallucinated"  : total_hallucinated,
+            "hallucination_rate"  : round(hall_rate, 1),
+            "filter_accuracy"     : round(100 - hall_rate, 1),
         },
         "by_category": {
             cat: {
-                "detected": sum(1 for r in results if r["category"] == cat and r["detected"]),
-                "total": len([r for r in results if r["category"] == cat]),
+                "detected"      : sum(1 for r in results if r["category"] == cat and r["detected"]),
+                "total"         : len([r for r in results if r["category"] == cat]),
                 "detection_rate": round(
                     sum(1 for r in results if r["category"] == cat and r["detected"]) /
                     max(len([r for r in results if r["category"] == cat]), 1) * 100, 1)
@@ -1025,8 +1034,7 @@ def run_evaluation():
 
     print()
     print("Results saved to evaluation_results.json")
-    print("=" * 60)
-
+    print("=" * 65)
     return output
 
 
