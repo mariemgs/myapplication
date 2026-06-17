@@ -59,7 +59,7 @@ jobs:
         run: docker compose exec -T backend bash scripts/prestart.sh
 
       - name: Run tests
-        run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+        run: docker compose exec -T -e TESTING=true backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
 
       - name: Save coverage report
         if: always()
@@ -563,8 +563,7 @@ jobs:
           docker stop $(docker ps -q) 2>/dev/null || true
           sleep 3
 
-      - name: Remove old db volume
-        run: docker volume rm myapp-staging_app-db-data || true
+
 
       - name: Build
         run: VITE_API_URL=${{ secrets.VITE_API_URL }} docker compose -f compose.yml -f compose.override.yml -p myapp-staging build

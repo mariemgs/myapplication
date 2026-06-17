@@ -64,7 +64,7 @@ jobs:
         run: docker compose exec -T backend bash scripts/prestart.sh
 
       - name: Run tests
-        run: docker compose exec -T backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+        run: docker compose exec -T -e TESTING=true backend uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
 
       - name: Save coverage report
         if: always()
@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Coverage report check
-        run: docker compose exec -T backend uv run coverage report --fail-under=90 --omit="*/initial_data.py,*/api/routes/agents.py"
+        run: docker compose exec -T -e TESTING=true backend uv run coverage report --fail-under=90 --omit="*/initial_data.py,*/api/routes/agents.py"
 
       - name: Stop Services
         if: always()
