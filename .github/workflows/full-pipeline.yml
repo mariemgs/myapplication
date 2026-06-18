@@ -573,8 +573,16 @@ jobs:
 
       - name: Verify deployment
         run: |
-          sleep 15
-          curl -s ${{ secrets.VITE_API_URL }}/api/v1/utils/health-check/ | grep -q "true" && echo "✅ Deployment successful!" || echo "❌ Health check failed"
+          for i in {1..12}; do
+            if curl -s ${{ secrets.VITE_API_URL }}/api/v1/utils/health-check/ | grep -q "true"; then
+              echo "✅ Deployment successful!"
+              exit 0
+            fi
+            echo "Waiting for backend... ($i/12)"
+            sleep 10
+          done
+          echo "❌ Health check failed after 2 minutes"
+          exit 1
 
   # ── 12. AI Orchestrator ─────────────────────────────────────────
   ai-orchestrator:
