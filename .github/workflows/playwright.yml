@@ -51,6 +51,7 @@ jobs:
         GH_PAT=${{ secrets.GH_PAT }}
         GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
         PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
+        TESTING=true
         EOF
 
 
@@ -132,6 +133,7 @@ jobs:
         GH_PAT=${{ secrets.GH_PAT }}
         GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
         PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
+        TESTING=true
         EOF
     - name: Generate client
       run: |
