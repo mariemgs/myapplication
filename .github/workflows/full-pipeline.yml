@@ -518,9 +518,7 @@ jobs:
         run: |
           sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
           sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
-
       - uses: actions/checkout@v4
-
       - name: Create .env file
         run: |
           cat << ENVEOF > .env
@@ -553,24 +551,23 @@ jobs:
           GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
           PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
           ENVEOF
-
       - name: Create Traefik network
         run: docker network create traefik-public || true
-
       - name: Stop existing containers
         run: |
           docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
           docker stop $(docker ps -q) 2>/dev/null || true
           sleep 3
-
-
-
+      - name: Reset DB password
+        run: |
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d db
+          sleep 10
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging exec -T db psql -U ${{ secrets.POSTGRES_USER }} -c "ALTER USER ${{ secrets.POSTGRES_USER }} PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging down
       - name: Build
         run: VITE_API_URL=${{ secrets.VITE_API_URL }} docker compose -f compose.yml -f compose.override.yml -p myapp-staging build
-
       - name: Deploy
         run: VITE_API_URL=${{ secrets.VITE_API_URL }} docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
-
       - name: Verify deployment
         run: |
           for i in {1..12}; do
