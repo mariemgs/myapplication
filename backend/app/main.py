@@ -36,8 +36,11 @@ if settings.all_cors_origins:
 #import os
 #if not os.environ.get("TESTING"):
 #   try:
-#       Instrumentator().instrument(app).expose(app)
+#Instrumentator().instrument(app).expose(app)
 #    except Exception:
 #        pass
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Prometheus metrics - must be after include_router
+Instrumentator().instrument(app).expose(app)
