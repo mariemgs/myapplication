@@ -17,13 +17,6 @@ HEADERS = {
 
 AGENT_WORKFLOWS = [
     {
-        "id": "ai-failure-analyzer",
-        "name": "Failure Analyzer",
-        "icon": "🔴",
-        "description": "Analyzes CI/CD pipeline failures and suggests fixes",
-        "file": "ai-failure-analyzer.yml",
-    },
-    {
         "id": "ai-security-analyzer",
         "name": "Security Analyzer",
         "icon": "🔒",
@@ -220,6 +213,7 @@ def get_pipeline_status(current_user: CurrentUser) -> Any:
         "owasp-zap.yml",
         "sonarqube.yml",
         "deploy-staging.yml",
+        "full-pipeline.yml",
     ]
     pipeline = []
     with httpx.Client() as client:

@@ -586,6 +586,7 @@ jobs:
   ai-orchestrator:
     name: 🤖 AI Orchestrator
     runs-on: self-hosted
+    timeout-minutes: 15
     needs: [sast-bandit, dependency-scan, secrets-scan, container-scan, iac-scan, code-quality, dast, e2e-tests, deploy]
     if: always()
     steps:

@@ -56,7 +56,6 @@ function StatusPill({ value }: { value: string | null }) {
 function AgentIcon({ icon }: { icon: string }) {
   const size = 'h-4 w-4'
   const map: Record<string, React.ReactNode> = {
-    '🔴': <Terminal className={size} />,
     '🔒': <Shield className={size} />,
     '📊': <Activity className={size} />,
     '🔍': <Code className={size} />,
@@ -185,11 +184,13 @@ function AgentsTab() {
 function SecurityTab() {
   const SECURITY_TOOLS = [
     { name: 'Bandit', label: 'Python SAST', icon: <Bug className="h-5 w-5" />, color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', description: 'Static analysis security testing for Python code', workflow: 'test-backend.yml', checks: ['SQL Injection', 'Hardcoded Secrets', 'Weak Cryptography', 'Command Injection'] },
-    { name: 'Trivy', label: 'Container Scan', icon: <Shield className="h-5 w-5" />, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', description: 'Vulnerability scanning for Docker images and filesystems', workflow: 'test-docker-compose.yml', checks: ['OS Vulnerabilities', 'Dependency CVEs', 'Misconfigurations', 'Secrets'] },
+    { name: 'Trivy', label: 'Container Scan', icon: <Shield className="h-5 w-5" />, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', description: 'Vulnerability scanning for Docker images and filesystems', workflow: 'full-pipeline.yml', checks: ['OS Vulnerabilities', 'Dependency CVEs', 'Misconfigurations', 'Secrets'] },
     { name: 'OWASP ZAP', label: 'DAST', icon: <Lock className="h-5 w-5" />, color: 'text-red-600', bg: 'bg-red-50 border-red-200', description: 'Dynamic application security testing on running app', workflow: 'owasp-zap.yml', checks: ['XSS', 'SQL Injection', 'CSRF', 'Broken Authentication'] },
     { name: 'SonarQube', label: 'Code Quality', icon: <FileSearch className="h-5 w-5" />, color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200', description: 'Code quality and security hotspot analysis', workflow: 'sonarqube.yml', checks: ['Code Smells', 'Bugs', 'Security Hotspots', 'Coverage'] },
     { name: 'pip-audit', label: 'Dependency Scan', icon: <AlertTriangle className="h-5 w-5" />, color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', description: 'Python dependency vulnerability scanning', workflow: 'test-backend.yml', checks: ['Known CVEs', 'Outdated Packages', 'License Issues'] },
     { name: 'Gitleaks', label: 'Secrets Detection', icon: <Lock className="h-5 w-5" />, color: 'text-pink-600', bg: 'bg-pink-50 border-pink-200', description: 'Detect hardcoded secrets in source code', workflow: 'test-backend.yml', checks: ['API Keys', 'Passwords', 'Tokens', 'Private Keys'] },
+    { name: 'Checkov', label: 'IaC Security', icon: <Shield className="h-5 w-5" />, color: 'text-teal-600', bg: 'bg-teal-50 border-teal-200', description: 'Infrastructure as Code security scanning for Dockerfiles', workflow: 'full-pipeline.yml', checks: ['HEALTHCHECK', 'Non-root User', 'Dockerfile Best Practices'] },
+    { name: 'Syft', label: 'SBOM', icon: <FileSearch className="h-5 w-5" />, color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200', description: 'Software Bill of Materials generation for container images', workflow: 'full-pipeline.yml', checks: ['Component Inventory', 'Dependency Traceability', 'License Compliance'] },
   ]
 
   const { data: pipelineData } = useSuspenseQuery({
@@ -211,10 +212,14 @@ function SecurityTab() {
       <div className="rounded-xl border bg-gradient-to-r from-slate-50 to-slate-100 p-5">
         <div className="flex items-center gap-3 mb-3">
           <CheckCircle className="h-5 w-5 text-emerald-600" />
-          <span className="font-semibold">Security Coverage: 6 tools active</span>
+          <span className="font-semibold">Security Coverage: 8 tools active</span>
         </div>
         <div className="grid grid-cols-3 gap-3 text-sm">
-          {[ { label: 'SAST Tools', value: '2', desc: 'Bandit + SonarQube' }, { label: 'DAST Tools', value: '1', desc: 'OWASP ZAP' }, { label: 'Supply Chain', value: '3', desc: 'Trivy + pip-audit + Gitleaks' } ].map((s) => (
+          {[
+            { label: 'SAST Tools', value: '2', desc: 'Bandit + SonarQube' },
+            { label: 'DAST Tools', value: '1', desc: 'OWASP ZAP' },
+            { label: 'Supply Chain & IaC', value: '5', desc: 'Trivy + pip-audit + Gitleaks + Checkov + Syft' },
+          ].map((s) => (
             <div key={s.label} className="bg-white rounded-lg border p-3">
               <p className="text-2xl font-bold text-slate-800">{s.value}</p>
               <p className="font-medium text-xs">{s.label}</p>
@@ -331,7 +336,6 @@ function ReportsTab() {
   const issues = issuesData?.issues ?? []
 
   const typeConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-    failure: { label: 'Failure Analysis', color: 'text-red-600 bg-red-50 border-red-200', icon: <Terminal className="h-3.5 w-3.5" /> },
     security: { label: 'Security Report', color: 'text-orange-600 bg-orange-50 border-orange-200', icon: <Shield className="h-3.5 w-3.5" /> },
     orchestrator: { label: 'Orchestrator', color: 'text-purple-600 bg-purple-50 border-purple-200', icon: <Zap className="h-3.5 w-3.5" /> },
     review: { label: 'Code Review', color: 'text-blue-600 bg-blue-50 border-blue-200', icon: <Code className="h-3.5 w-3.5" /> },
