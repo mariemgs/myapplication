@@ -7,24 +7,23 @@ jobs:
     runs-on:
       - self-hosted
       - Linux
+    timeout-minutes: 15
     steps:
       - name: Fix permissions
         run: |
           sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/blob-report || true
           sudo rm -rf /home/meriemguesmi/actions-runner/_work/myapplication/myapplication/frontend/test-results || true
           sudo chown -R meriemguesmi:meriemguesmi /home/meriemguesmi/actions-runner/_work/myapplication/ || true
-
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Create .env file
         run: |
-          cat << EOF > .env
-          DOMAIN=${{ secrets.DOMAIN_STAGING }}
+          cat << 'ENVEOF' > .env
+          DOMAIN=${{ secrets.DOMAIN }}
           FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}
-          ENVIRONMENT=staging
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
           PROJECT_NAME=${{ secrets.PROJECT_NAME }}
-          STACK_NAME=${{ secrets.STACK_NAME_STAGING }}
+          STACK_NAME=${{ secrets.STACK_NAME }}
           BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
           SECRET_KEY=${{ secrets.SECRET_KEY }}
           FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}
@@ -48,25 +47,33 @@ jobs:
           GH_PAT=${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY=${{ secrets.GITHUB_REPOSITORY }}
           PROMETHEUS_URL=${{ secrets.PROMETHEUS_URL }}
-          EOF
-
+          ENVEOF
       - name: Create Traefik network
         run: docker network create traefik-public || true
-
-      - name: Force clear DB port
-        run: |
-          CONTAINER_ID=$(docker ps -q --filter "publish=5432")
-          if [ ! -z "$CONTAINER_ID" ]; then
-            echo "Stopping container $CONTAINER_ID which is holding port 5432..."
-            docker stop $CONTAINER_ID || true
-          fi
-
       - name: Stop existing containers
-        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
-
-
+        run: |
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging down || true
+          docker stop $(docker ps -q) 2>/dev/null || true
+          sleep 3
+      - name: Reset DB password
+        run: |
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d db
+          sleep 10
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging exec -T db psql -U ${{ secrets.POSTGRES_USER }} -c "ALTER USER ${{ secrets.POSTGRES_USER }} PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
+          docker compose -f compose.yml -f compose.override.yml -p myapp-staging down
       - name: Build
-        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging build
-
+        run: VITE_API_URL=${{ secrets.VITE_API_URL }} docker compose -f compose.yml -f compose.override.yml -p myapp-staging build
       - name: Deploy
-        run: docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
+        run: VITE_API_URL=${{ secrets.VITE_API_URL }} docker compose -f compose.yml -f compose.override.yml -p myapp-staging up -d
+      - name: Verify deployment
+        run: |
+          for i in {1..12}; do
+            if curl -s ${{ secrets.VITE_API_URL }}/api/v1/utils/health-check/ | grep -q "true"; then
+              echo "✅ Deployment successful!"
+              exit 0
+            fi
+            echo "Waiting for backend... ($i/12)"
+            sleep 10
+          done
+          echo "❌ Health check failed after 2 minutes"
+          exit 1
