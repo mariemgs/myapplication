@@ -511,6 +511,7 @@ jobs:
   deploy:
     name: 🚀 Deploy to Staging
     runs-on: self-hosted
+    timeout-minutes: 15
     needs: [sast-bandit, dependency-scan, secrets-scan, container-scan, iac-scan, dast, e2e-tests]
     if: github.ref == 'refs/heads/main'
     steps:
