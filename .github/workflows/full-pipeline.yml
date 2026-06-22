@@ -375,6 +375,7 @@ jobs:
       - name: Copy coverage xml
         run: |
           docker cp $(docker compose ps -q backend):/app/backend/coverage.xml coverage.xml || true
+          sed -i 's|/app/backend/||g' coverage.xml || true
 
       - name: Stop services
         if: always()
