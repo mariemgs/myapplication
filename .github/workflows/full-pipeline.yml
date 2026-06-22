@@ -370,8 +370,7 @@ jobs:
         run: |
           docker compose exec -T -e TESTING=true backend uv run pytest tests/ \
             --cov=app \
-            --cov-report=xml:coverage.xml \
-            --omit="*/initial_data.py,*/api/routes/agents.py" || true
+            --cov-report=xml:coverage.xml || true
 
       - name: Copy coverage xml
         run: |
