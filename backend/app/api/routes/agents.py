@@ -21,13 +21,13 @@ AGENT_WORKFLOWS = [
         "name": "Security Analyzer",
         "icon": "🔒",
         "description": "Generates unified security reports from Bandit, Trivy, ZAP & SonarQube",
-        "file": "ai-security-analyzer.yml",
+        "file": "ai-orchestrator.yml",
     },
     {
         "id": "ai-monitoring-agent",
         "name": "Monitoring Agent",
         "icon": "📊",
-        "description": "Queries Prometheus metrics and opens GitHub Issues on anomalies",
+        "description": "Queries Prometheus metrics and detects anomalies",
         "file": "ai-monitoring-agent.yml",
     },
     {
@@ -39,13 +39,12 @@ AGENT_WORKFLOWS = [
     },
     {
         "id": "ai-orchestrator",
-        "name": "Orchestrator",
+        "name": "AI Orchestrator",
         "icon": "🤖",
         "description": "LangGraph multi-agent system coordinating all agents",
-        "file": "ai-orchestrator.yml",
+        "file": "full-pipeline.yml",
     },
 ]
-
 
 def time_ago(date_str: str | None) -> str:
     if not date_str:
@@ -147,21 +146,32 @@ def get_agent_reports(current_user: CurrentUser) -> Any:
     """Get recent AI agent reports from GitHub commit comments"""
     with httpx.Client() as client:
         try:
-            url = f"https://api.github.com/repos/{REPO}/comments?per_page=20"
-            response = client.get(url, headers=HEADERS, timeout=10)
-            if response.status_code != 200:
+            # Get recent commits first, then fetch their comments
+            commits_url = f"https://api.github.com/repos/{REPO}/commits?per_page=15"
+            commits_resp = client.get(commits_url, headers=HEADERS, timeout=10)
+            if commits_resp.status_code != 200:
                 return {"reports": []}
-            comments = response.json()
+
+            all_comments = []
+            for commit in commits_resp.json():
+                sha = commit["sha"]
+                comments_url = f"https://api.github.com/repos/{REPO}/commits/{sha}/comments"
+                resp = client.get(comments_url, headers=HEADERS, timeout=10)
+                if resp.status_code == 200:
+                    all_comments.extend(resp.json())
+
             reports = []
-            for comment in comments:
+            for comment in all_comments:
                 body = comment.get("body", "")
-                if any(keyword in body for keyword in ["🤖", "🔒", "📊", "AI Pipeline", "AI Security", "Orchestrator"]):
+                # Skip Failure Analyzer and Gemini reports (no longer used)
+                if any(skip in body for skip in ["Failure Analysis", "Pipeline Failure", "Gemini", "gemini"]):
+                    continue
+                # Match AI agent reports
+                if any(keyword in body for keyword in ["🤖", "🔒", "📊", "AI Orchestrator", "AI Security", "Orchestrator Report", "Security Analysis"]):
                     report_type = "unknown"
-                    if "Failure Analysis" in body or "Pipeline Failure" in body:
-                        report_type = "failure"
-                    elif "Security" in body:
+                    if "Security Analysis" in body or "Security" in body:
                         report_type = "security"
-                    elif "Monitoring" in body or "Orchestrator" in body:
+                    elif "Orchestrator" in body or "Monitoring" in body:
                         report_type = "orchestrator"
                     elif "Code Review" in body:
                         report_type = "review"

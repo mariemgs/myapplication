@@ -9,7 +9,7 @@ on:
 jobs:
   # ── 1. Unit & Integration Tests ─────────────────────────────────
   tests:
-    name: 🧪 Unit & Integration Tests
+    name: Unit & Integration Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +81,7 @@ jobs:
 
   # ── 2. SAST - Bandit ────────────────────────────────────────────
   sast-bandit:
-    name: 🔍 SAST - Bandit
+    name: SAST - Bandit
     runs-on: ubuntu-latest
     needs: tests
     if: always()
@@ -101,7 +101,7 @@ jobs:
 
   # ── 3. Dependency Scan ──────────────────────────────────────────
   dependency-scan:
-    name: 📦 Dependency Scan - pip-audit
+    name: Dependency Scan - pip-audit
     runs-on: ubuntu-latest
     needs: tests
     if: always()
@@ -121,7 +121,7 @@ jobs:
 
   # ── 4. Secrets Scan ─────────────────────────────────────────────
   secrets-scan:
-    name: 🔐 Secrets Scan - Gitleaks
+    name: Secrets Scan - Gitleaks
     runs-on: ubuntu-latest
     needs: tests
     if: always()
@@ -136,7 +136,7 @@ jobs:
 
   # ── 5. Container Scan ───────────────────────────────────────────
   container-scan:
-    name: 🐳 Container Scan - Trivy
+    name: Container Scan - Trivy
     runs-on: ubuntu-latest
     needs: tests
     if: always()
@@ -215,7 +215,7 @@ jobs:
 
   # ── 6. SBOM ─────────────────────────────────────────────────────
   sbom:
-    name: 📋 SBOM - Syft
+    name: SBOM - Syft
     runs-on: ubuntu-latest
     needs: container-scan
     steps:
@@ -276,9 +276,9 @@ jobs:
             sbom-table.txt
           retention-days: 7
 
-  # ── 7. IaC Scan ─────────────────────────────────────────────────
+ # ── 7. IaC Scan ─────────────────────────────────────────────────
   iac-scan:
-    name: 🏗️ IaC Scan - Checkov
+    name: IaC Scan - Checkov
     runs-on: ubuntu-latest
     needs: tests
     if: always()
@@ -287,7 +287,7 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - name: Run Checkov
+      - name: Run Checkov (SARIF)
         uses: bridgecrewio/checkov-action@master
         with:
           directory: .
@@ -296,11 +296,22 @@ jobs:
           output_format: sarif
           output_file_path: checkov-report.sarif
         continue-on-error: true
+      - name: Run Checkov (JSON)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile
+          soft_fail: true
+          output_format: json
+          output_file_path: checkov-report.json
+        continue-on-error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: checkov-report
-          path: checkov-report.sarif
+          path: |
+            checkov-report.sarif
+            checkov-report.json
           retention-days: 7
       - name: Upload Checkov SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
@@ -310,7 +321,7 @@ jobs:
 
   # ── 8. Code Quality ─────────────────────────────────────────────
   code-quality:
-    name: 📊 Code Quality - SonarQube
+    name: Code Quality - SonarQube
     runs-on: ubuntu-latest
     needs: tests
     if: always()
@@ -357,7 +368,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          docker compose exec -T backend uv run pytest tests/ \
+          docker compose exec -T -e TESTING=true backend uv run pytest tests/ \
             --cov=app \
             --cov-report=xml:coverage.xml \
             --omit="*/initial_data.py,*/api/routes/agents.py" || true
@@ -386,7 +397,7 @@ jobs:
 
   # ── 9. DAST ─────────────────────────────────────────────────────
   dast:
-    name: 🌐 DAST - OWASP ZAP
+    name: DAST - OWASP ZAP
     runs-on: ubuntu-latest
     needs: tests
     permissions:
@@ -443,15 +454,16 @@ jobs:
         with:
           target: "http://localhost:8000"
           rules_file_name: ".zap/rules.tsv"
-          cmd_options: "-a"
+          cmd_options: "-a -J zap-report.json"
           fail_action: false
         continue-on-error: true
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: zap-report
-          path: report_html.html
+          path: |
+            report_html.html
+            zap-report.json
           retention-days: 7
 
       - name: Stop app
@@ -460,7 +472,7 @@ jobs:
 
   # ── 10. E2E Tests ───────────────────────────────────────────────
   e2e-tests:
-    name: 🎭 E2E Tests - Playwright
+    name: E2E Tests - Playwright
     runs-on: ubuntu-latest
     needs: tests
     if: always()
@@ -509,7 +521,7 @@ jobs:
 
   # ── 11. Deploy ──────────────────────────────────────────────────
   deploy:
-    name: 🚀 Deploy to Staging
+    name: Deploy to Staging
     runs-on: self-hosted
     timeout-minutes: 15
     needs: [sast-bandit, dependency-scan, secrets-scan, container-scan, iac-scan, dast, e2e-tests]
@@ -584,7 +596,7 @@ jobs:
 
   # ── 12. AI Orchestrator ─────────────────────────────────────────
   ai-orchestrator:
-    name: 🤖 AI Orchestrator
+    name: AI Orchestrator
     runs-on: self-hosted
     timeout-minutes: 15
     needs: [sast-bandit, dependency-scan, secrets-scan, container-scan, iac-scan, code-quality, dast, e2e-tests, deploy]
