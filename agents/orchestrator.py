@@ -143,7 +143,7 @@ def data_fetcher_node(state: AgentState) -> AgentState:
     trivy = read_report("security-reports/trivy-report.json")
     pipaudit = read_report("security-reports/pip-audit-report.json")
     zap = read_report("zap-report/zap-report.json")
-    checkov = read_report("security-reports/checkov-report.json")
+    checkov = read_report("security-reports/checkov-report.json/results_json.json")
 
     print("  Bandit: {}...".format(bandit[:60]))
     print("  Trivy: {}...".format(trivy[:60]))
