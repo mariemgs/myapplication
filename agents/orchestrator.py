@@ -32,6 +32,53 @@ def get_llm():
     )
 
 
+def send_slack_notification(security_issues, monitoring_issues, sha, repo):
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        print("  No Slack webhook configured")
+        return
+    if security_issues and monitoring_issues:
+        color = "danger"
+        status = "CRITICAL - Security Issues + Monitoring Anomalies"
+        emoji = ":rotating_light:"
+    elif security_issues:
+        color = "warning"
+        status = "WARNING - Security Issues Detected"
+        emoji = ":warning:"
+    elif monitoring_issues:
+        color = "warning"
+        status = "WARNING - Monitoring Anomalies Detected"
+        emoji = ":chart_with_upwards_trend:"
+    else:
+        color = "good"
+        status = "OK - All Clear"
+        emoji = ":white_check_mark:"
+    commit_url = "https://github.com/{}/commit/{}".format(repo, sha)
+    payload = {
+        "attachments": [
+            {
+                "color": color,
+                "title": "{} DevSecOps Pipeline Report".format(emoji),
+                "text": "*Status:* {}\n*Commit:* <{}|{}>\n*Repo:* {}".format(
+                    status, commit_url, sha[:7], repo),
+                "footer": "AI Orchestrator | LangGraph + Groq",
+                "fields": [
+                    {"title": "Security", "value": ":x: Issues Found" if security_issues else ":white_check_mark: Clean", "short": True},
+                    {"title": "Monitoring", "value": ":warning: Anomalies" if monitoring_issues else ":white_check_mark: Healthy", "short": True},
+                ]
+            }
+        ]
+    }
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        if response.status_code == 200:
+            print("  Slack notification sent!")
+        else:
+            print("  Slack notification failed: {}".format(response.status_code))
+    except Exception as e:
+        print("  Slack error: {}".format(e))
+
+
 def read_report(filepath: str) -> str:
     alternatives = [filepath, os.path.basename(filepath), f"security-reports/{os.path.basename(filepath)}"]
     for alt in alternatives:
@@ -129,7 +176,7 @@ def get_prometheus_metrics() -> dict:
         return None
 
     return {
-        "error_rate": query('sum(rate(http_requests_total{status=~"4..|5.."}[5m])) / sum(rate(http_requests_total[5m]))'),
+        "error_rate": query('sum(rate(http_requests_total{status_code=~"4..|5.."}[5m])) / sum(rate(http_requests_total[5m]))'),
         "response_time": query('sum(rate(http_request_duration_seconds_sum[5m])) / sum(rate(http_request_duration_seconds_count[5m]))'),
         "request_rate": query('sum(rate(http_requests_total[5m])) * 60'),
         "total_requests": query('sum(http_requests_total)'),
@@ -289,6 +336,13 @@ def reporter_node(state: AgentState) -> AgentState:
 
     result = post_github_comment.invoke({"comment": report})
     print("  Report posted: {}".format(result))
+
+    send_slack_notification(
+        security_issues=state.get("has_security_issues", False),
+        monitoring_issues=state.get("has_monitoring_issues", False),
+        sha=state.get("commit_sha", ""),
+        repo=os.environ.get("GITHUB_REPOSITORY", "")
+    )
 
     if state.get("has_monitoring_issues"):
         create_github_issue.invoke({
