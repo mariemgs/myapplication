@@ -122,7 +122,41 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -149,21 +183,17 @@
       },
       "id": 2,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.4.1",
       "targets": [
@@ -176,7 +206,7 @@
         }
       ],
       "title": "Average Response Time",
-      "type": "stat"
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -263,7 +293,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(http_requests_total{status=~\"4..|5..\"}[1m])",
+          "expr": "sum(rate(http_requests_total{status_code=~\"4..|5..\"}[1m])) or vector(0)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -349,6 +379,6 @@
   "timezone": "browser",
   "title": "my app dashboard",
   "uid": "adgpwwm",
-  "version": 5,
+  "version": 1,
   "weekStart": ""
 }
